@@ -376,7 +376,9 @@
                                     {% endif %}
                                     <div class="mt-1">
                                         <span class="badge bg-info">
-                                            {% if request.get_pto_breakdown %}
+                                            {% if request.is_partial_day %}
+                                                {{ "%.1f"|format(request.duration_hours) }} hrs (partial day)
+                                            {% elif request.get_pto_breakdown %}
                                                 {% set breakdown = request.get_pto_breakdown() %}
                                                 {{ breakdown.business_days }} business days
                                             {% else %}
@@ -604,7 +606,9 @@
                                     <span class="badge bg-secondary">{{ request.pto_type }}</span>
                                 </td>
                                 <td>
-                                    {% if request.get_pto_breakdown %}
+                                    {% if request.is_partial_day %}
+                                        {{ "%.1f"|format(request.duration_hours) }} hrs
+                                    {% elif request.get_pto_breakdown %}
                                         {% set breakdown = request.get_pto_breakdown() %}
                                         {{ breakdown.business_days }}
                                     {% else %}

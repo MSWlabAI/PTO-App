@@ -265,7 +265,14 @@ class PTORequest(db.Model):
     
     @property
     def duration_days(self):
-        """Calculate duration in business days (excludes weekends and holidays)"""
+        """Calculate duration in business days (excludes weekends and holidays).
+        For partial day requests, returns the fractional equivalent (hours / 7.5)
+        so balance deductions and dashboard stats account for partials correctly."""
+        if self.is_partial_day and self.start_time and self.end_time:
+            try:
+                return round(self.duration_hours / 7.5, 2)
+            except (ValueError, TypeError, ZeroDivisionError):
+                pass
         try:
             from business_days import calculate_pto_days
             return calculate_pto_days(self.start_date, self.end_date)
@@ -299,7 +306,22 @@ class PTORequest(db.Model):
             return 7.5
 
     def get_pto_breakdown(self):
-        """Get detailed breakdown of PTO request including holidays and weekends"""
+        """Get detailed breakdown of PTO request including holidays and weekends.
+        For partial day requests, returns a single-day breakdown scaled by the
+        partial fraction so business_days reflects hours / 7.5."""
+        if self.is_partial_day and self.start_time and self.end_time:
+            try:
+                fraction = round(self.duration_hours / 7.5, 2)
+                return {
+                    'total_days': fraction,
+                    'business_days': fraction,
+                    'weekend_days': 0,
+                    'holiday_days': 0,
+                    'holidays_list': [],
+                    'weekends_list': []
+                }
+            except (ValueError, TypeError, ZeroDivisionError):
+                pass
         try:
             from business_days import get_pto_breakdown
             return get_pto_breakdown(self.start_date, self.end_date)

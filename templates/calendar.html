@@ -259,11 +259,11 @@ document.addEventListener('DOMContentLoaded', function() {
             </div>
             <div class="row mt-2">
                 <div class="col-sm-4"><strong>Dates:</strong></div>
-                <div class="col-sm-8">${startDate.toLocaleDateString()} ${endDate.getTime() !== startDate.getTime() ? 'to ' + endDate.toLocaleDateString() : ''}</div>
+                <div class="col-sm-8">${startDate.toLocaleDateString()} ${endDate.getTime() !== startDate.getTime() ? 'to ' + endDate.toLocaleDateString() : ''}${props.is_partial_day && props.partial_start_time && props.partial_end_time ? ` <span class="badge bg-info ms-1">Partial day ${props.partial_start_time}–${props.partial_end_time}</span>` : ''}</div>
             </div>
             <div class="row mt-2">
                 <div class="col-sm-4"><strong>Duration:</strong></div>
-                <div class="col-sm-8">${props.duration}${props.is_partial_day ? '' : ' days'}</div>
+                <div class="col-sm-8">${props.duration}</div>
             </div>
             ${props.reason ? `
             <div class="row mt-2">
@@ -310,7 +310,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     <div class="upcoming-event ${statusClass}">
                         <strong>${title}</strong><br>
                         <small class="text-muted">${event.extendedProps.type}${isCallOut ? ' (Call Out)' : ''}</small><br>
-                        <small>${startDate.toLocaleDateString()} • ${event.extendedProps.duration}${event.extendedProps.is_partial_day ? '' : ' days'}</small><br>
+                        <small>${startDate.toLocaleDateString()} • ${event.extendedProps.duration}${event.extendedProps.is_partial_day && event.extendedProps.partial_start_time ? ` (${event.extendedProps.partial_start_time}–${event.extendedProps.partial_end_time})` : ''}</small><br>
                         <span class="badge ${badgeClass} mt-1">${event.extendedProps.status.charAt(0).toUpperCase() + event.extendedProps.status.slice(1)}</span>
                     </div>
                 </div>

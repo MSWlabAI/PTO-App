@@ -488,11 +488,14 @@ def register_routes(app):
                 color = '#6c757d'  # Gray for other statuses
                 text_color = '#fff'
 
-            # Calculate duration in business days
+            # Calculate duration — show hours for partial days, days otherwise
             try:
-                duration = request.duration_days  # This now uses business days calculation
+                if request.is_partial_day:
+                    duration_label = f"{request.duration_hours:.1f} hrs"
+                else:
+                    duration_label = f"{request.duration_days} day{'s' if request.duration_days != 1 else ''}"
             except:
-                duration = 1
+                duration_label = "1 day"
 
             # Determine title based on call-out status
             if request.is_call_out:
@@ -518,8 +521,10 @@ def register_routes(app):
                         'type': request.pto_type,
                         'status': request.status,
                         'reason': request.reason or '',
-                        'duration': duration,
+                        'duration': duration_label,
                         'is_partial_day': request.is_partial_day,
+                        'partial_start_time': request.start_time if request.is_partial_day else None,
+                        'partial_end_time': request.end_time if request.is_partial_day else None,
                         'is_call_out': request.is_call_out,
                         'request_id': request.id
                     }
@@ -628,11 +633,15 @@ def register_routes(app):
                     color = '#6c757d'  # Gray for other statuses
                     text_color = '#fff'
 
-                # Calculate duration
+                # Calculate duration label — hours for partial, days otherwise
                 try:
-                    duration = request.duration_days
+                    if request.is_partial_day:
+                        duration_label = f"{request.duration_hours:.1f} hrs"
+                    else:
+                        d = request.duration_days
+                        duration_label = f"{d} day{'s' if d != 1 else ''}"
                 except:
-                    duration = 1
+                    duration_label = "1 day"
 
                 # Build event title
                 if request.is_call_out:
@@ -658,7 +667,9 @@ def register_routes(app):
                             'status': request.status,
                             'is_call_out': request.is_call_out,
                             'is_partial_day': request.is_partial_day,
-                            'duration': f"{duration} day{'s' if duration != 1 else ''}",
+                            'partial_start_time': request.start_time if request.is_partial_day else None,
+                            'partial_end_time': request.end_time if request.is_partial_day else None,
+                            'duration': duration_label,
                             'reason': request.reason or '',
                             'team': request.manager_team
                         }
@@ -707,9 +718,13 @@ def register_routes(app):
                     text_color = '#fff'
 
                 try:
-                    duration = request.duration_days
+                    if request.is_partial_day:
+                        duration_label = f"{request.duration_hours:.1f} hrs"
+                    else:
+                        d = request.duration_days
+                        duration_label = f"{d} day{'s' if d != 1 else ''}"
                 except:
-                    duration = 1
+                    duration_label = "1 day"
 
                 title = f"CALL OUT - {request.member.name}" if request.is_call_out else request.member.name
 
@@ -730,7 +745,9 @@ def register_routes(app):
                             'status': request.status,
                             'is_call_out': request.is_call_out,
                             'is_partial_day': request.is_partial_day,
-                            'duration': f"{duration} day{'s' if duration != 1 else ''}",
+                            'partial_start_time': request.start_time if request.is_partial_day else None,
+                            'partial_end_time': request.end_time if request.is_partial_day else None,
+                            'duration': duration_label,
                             'reason': request.reason or ''
                         }
                     }
