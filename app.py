@@ -300,12 +300,6 @@ def initialize_database():
                 'password': 'password#1'
             },
             {
-                'name': 'Sukhjeet Dhaliwal',
-                'email': 'Sukhjeet.Dhaliwal@mountsinai.org',
-                'role': 'echo_supervisor',
-                'password': 'password#1'
-            },
-            {
                 'name': 'Stephen Handzel',
                 'email': 'Stephen.Handzel@mountsinai.org',
                 'role': 'clinical',
@@ -361,6 +355,16 @@ def initialize_database():
             for m in non_ms_managers:
                 db.session.delete(m)
             print(f"Cleaned up {len(non_ms_managers)} non-Mount Sinai manager accounts")
+
+        # Hard delete Sukhjeet Dhaliwal: null out FK references then drop the row.
+        # Idempotent — no-op once the row is gone.
+        sukhjeet = Manager.query.filter(Manager.email.ilike('Sukhjeet.Dhaliwal@mountsinai.org')).first()
+        if sukhjeet:
+            PTORequest.query.filter_by(approved_by_id=sukhjeet.id).update({'approved_by_id': None})
+            from models import TardinessRecord
+            TardinessRecord.query.filter_by(recorded_by_id=sukhjeet.id).update({'recorded_by_id': None})
+            db.session.delete(sukhjeet)
+            print(f"Hard-deleted Manager Sukhjeet Dhaliwal (id={sukhjeet.id})")
 
         db.session.commit()
 
