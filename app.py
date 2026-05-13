@@ -360,7 +360,6 @@ def initialize_database():
         # Idempotent — no-op once the row is gone.
         sukhjeet = Manager.query.filter(Manager.email.ilike('Sukhjeet.Dhaliwal@mountsinai.org')).first()
         if sukhjeet:
-            PTORequest.query.filter_by(approved_by_id=sukhjeet.id).update({'approved_by_id': None})
             from models import TardinessRecord
             TardinessRecord.query.filter_by(recorded_by_id=sukhjeet.id).update({'recorded_by_id': None})
             db.session.delete(sukhjeet)
