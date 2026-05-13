@@ -465,6 +465,9 @@ def register_routes(app):
     def calendar():
         """Calendar view of PTO requests - viewable by anyone; detail modal requires login"""
         is_logged_in = 'user_id' in session
+        can_approve = session.get('user_role') in (
+            'admin', 'clinical', 'superadmin', 'moa_supervisor', 'echo_supervisor'
+        )
 
         # Get all PTO requests (approved and pending) for calendar display
         all_requests = PTORequest.query.filter(
@@ -534,7 +537,8 @@ def register_routes(app):
         return render_template('calendar.html',
                                requests=all_requests,
                                calendar_events=calendar_events,
-                               is_logged_in=is_logged_in)
+                               is_logged_in=is_logged_in,
+                               can_approve=can_approve)
 
     @app.route('/api/test-business-days')
     def test_business_days():
@@ -1489,12 +1493,13 @@ def register_routes(app):
     @roles_required('admin', 'clinical', 'superadmin', 'moa_supervisor', 'echo_supervisor')
     def approve_request(request_id):
         """Approve a PTO request and deduct hours from balance"""
+        next_view = 'calendar' if request.args.get('next') == 'calendar' else 'dashboard'
         try:
             pto_request = PTORequest.query.get_or_404(request_id)
 
             if pto_request.status != 'pending':
                 flash('This request has already been processed.', 'warning')
-                return redirect(url_for('dashboard'))
+                return redirect(url_for(next_view))
 
             pto_request.status = 'approved'
             pto_request.approved_date = get_eastern_time()
@@ -1526,12 +1531,13 @@ def register_routes(app):
         except Exception as e:
             flash(f'Error approving request: {str(e)}', 'error')
 
-        return redirect(url_for('dashboard'))
+        return redirect(url_for(next_view))
 
     @app.route('/deny_request/<int:request_id>', methods=['POST'])
     @roles_required('admin', 'clinical', 'superadmin', 'moa_supervisor', 'echo_supervisor')
     def deny_request(request_id):
         """Deny a PTO request"""
+        next_view = 'calendar' if request.form.get('next') == 'calendar' else 'dashboard'
         try:
             pto_request = PTORequest.query.get_or_404(request_id)
             denial_reason = request.form.get('denial_reason', 'No reason provided')
@@ -1554,7 +1560,7 @@ def register_routes(app):
         except Exception as e:
             flash(f'Error denying request: {str(e)}', 'error')
 
-        return redirect(url_for('dashboard'))
+        return redirect(url_for(next_view))
 
     @app.route('/approve_employee/<int:employee_id>')
     @roles_required('admin', 'clinical', 'superadmin')
