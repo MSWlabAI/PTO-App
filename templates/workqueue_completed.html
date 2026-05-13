@@ -74,7 +74,9 @@
                                 <span class="badge bg-secondary">{{ request.pto_type }}</span>
                             </td>
                             <td>
-                                {% if request.get_pto_breakdown %}
+                                {% if request.is_partial_day %}
+                                    <strong>{{ "%.1f"|format(request.duration_hours) }}</strong> hrs
+                                {% elif request.get_pto_breakdown %}
                                     {% set breakdown = request.get_pto_breakdown() %}
                                     <strong>{{ breakdown.business_days }}</strong> days
                                 {% else %}
@@ -172,16 +174,11 @@
                         </div>
                         <div class="col-md-3">
                             <strong>Total Days Used:</strong>
-                            {% set total_days = 0 %}
+                            {% set ns = namespace(total_days=0.0) %}
                             {% for req in requests %}
-                                {% if req.get_pto_breakdown %}
-                                    {% set breakdown = req.get_pto_breakdown() %}
-                                    {% set total_days = total_days + breakdown.business_days %}
-                                {% else %}
-                                    {% set total_days = total_days + req.duration_days %}
-                                {% endif %}
+                                {% set ns.total_days = ns.total_days + req.duration_days %}
                             {% endfor %}
-                            {{ total_days }} days
+                            {{ "%.1f"|format(ns.total_days) }} days
                         </div>
                         <div class="col-md-3">
                             <strong>Most Common Type:</strong>

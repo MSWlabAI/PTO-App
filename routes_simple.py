@@ -465,6 +465,9 @@ def register_routes(app):
     def calendar():
         """Calendar view of PTO requests - viewable by anyone; detail modal requires login"""
         is_logged_in = 'user_id' in session
+        can_approve = session.get('user_role') in (
+            'admin', 'clinical', 'superadmin', 'moa_supervisor', 'echo_supervisor'
+        )
 
         # Get all PTO requests (approved and pending) for calendar display
         all_requests = PTORequest.query.filter(
@@ -488,11 +491,14 @@ def register_routes(app):
                 color = '#6c757d'  # Gray for other statuses
                 text_color = '#fff'
 
-            # Calculate duration in business days
+            # Calculate duration — show hours for partial days, days otherwise
             try:
-                duration = request.duration_days  # This now uses business days calculation
+                if request.is_partial_day:
+                    duration_label = f"{request.duration_hours:.1f} hrs"
+                else:
+                    duration_label = f"{request.duration_days} day{'s' if request.duration_days != 1 else ''}"
             except:
-                duration = 1
+                duration_label = "1 day"
 
             # Determine title based on call-out status
             if request.is_call_out:
@@ -518,8 +524,10 @@ def register_routes(app):
                         'type': request.pto_type,
                         'status': request.status,
                         'reason': request.reason or '',
-                        'duration': duration,
+                        'duration': duration_label,
                         'is_partial_day': request.is_partial_day,
+                        'partial_start_time': request.start_time if request.is_partial_day else None,
+                        'partial_end_time': request.end_time if request.is_partial_day else None,
                         'is_call_out': request.is_call_out,
                         'request_id': request.id
                     }
@@ -529,7 +537,8 @@ def register_routes(app):
         return render_template('calendar.html',
                                requests=all_requests,
                                calendar_events=calendar_events,
-                               is_logged_in=is_logged_in)
+                               is_logged_in=is_logged_in,
+                               can_approve=can_approve)
 
     @app.route('/api/test-business-days')
     def test_business_days():
@@ -628,11 +637,15 @@ def register_routes(app):
                     color = '#6c757d'  # Gray for other statuses
                     text_color = '#fff'
 
-                # Calculate duration
+                # Calculate duration label — hours for partial, days otherwise
                 try:
-                    duration = request.duration_days
+                    if request.is_partial_day:
+                        duration_label = f"{request.duration_hours:.1f} hrs"
+                    else:
+                        d = request.duration_days
+                        duration_label = f"{d} day{'s' if d != 1 else ''}"
                 except:
-                    duration = 1
+                    duration_label = "1 day"
 
                 # Build event title
                 if request.is_call_out:
@@ -658,7 +671,9 @@ def register_routes(app):
                             'status': request.status,
                             'is_call_out': request.is_call_out,
                             'is_partial_day': request.is_partial_day,
-                            'duration': f"{duration} day{'s' if duration != 1 else ''}",
+                            'partial_start_time': request.start_time if request.is_partial_day else None,
+                            'partial_end_time': request.end_time if request.is_partial_day else None,
+                            'duration': duration_label,
                             'reason': request.reason or '',
                             'team': request.manager_team
                         }
@@ -707,9 +722,13 @@ def register_routes(app):
                     text_color = '#fff'
 
                 try:
-                    duration = request.duration_days
+                    if request.is_partial_day:
+                        duration_label = f"{request.duration_hours:.1f} hrs"
+                    else:
+                        d = request.duration_days
+                        duration_label = f"{d} day{'s' if d != 1 else ''}"
                 except:
-                    duration = 1
+                    duration_label = "1 day"
 
                 title = f"CALL OUT - {request.member.name}" if request.is_call_out else request.member.name
 
@@ -730,7 +749,9 @@ def register_routes(app):
                             'status': request.status,
                             'is_call_out': request.is_call_out,
                             'is_partial_day': request.is_partial_day,
-                            'duration': f"{duration} day{'s' if duration != 1 else ''}",
+                            'partial_start_time': request.start_time if request.is_partial_day else None,
+                            'partial_end_time': request.end_time if request.is_partial_day else None,
+                            'duration': duration_label,
                             'reason': request.reason or ''
                         }
                     }
@@ -1472,12 +1493,13 @@ def register_routes(app):
     @roles_required('admin', 'clinical', 'superadmin', 'moa_supervisor', 'echo_supervisor')
     def approve_request(request_id):
         """Approve a PTO request and deduct hours from balance"""
+        next_view = 'calendar' if request.args.get('next') == 'calendar' else 'dashboard'
         try:
             pto_request = PTORequest.query.get_or_404(request_id)
 
             if pto_request.status != 'pending':
                 flash('This request has already been processed.', 'warning')
-                return redirect(url_for('dashboard'))
+                return redirect(url_for(next_view))
 
             pto_request.status = 'approved'
             pto_request.approved_date = get_eastern_time()
@@ -1509,12 +1531,13 @@ def register_routes(app):
         except Exception as e:
             flash(f'Error approving request: {str(e)}', 'error')
 
-        return redirect(url_for('dashboard'))
+        return redirect(url_for(next_view))
 
     @app.route('/deny_request/<int:request_id>', methods=['POST'])
     @roles_required('admin', 'clinical', 'superadmin', 'moa_supervisor', 'echo_supervisor')
     def deny_request(request_id):
         """Deny a PTO request"""
+        next_view = 'calendar' if request.form.get('next') == 'calendar' else 'dashboard'
         try:
             pto_request = PTORequest.query.get_or_404(request_id)
             denial_reason = request.form.get('denial_reason', 'No reason provided')
@@ -1537,7 +1560,7 @@ def register_routes(app):
         except Exception as e:
             flash(f'Error denying request: {str(e)}', 'error')
 
-        return redirect(url_for('dashboard'))
+        return redirect(url_for(next_view))
 
     @app.route('/approve_employee/<int:employee_id>')
     @roles_required('admin', 'clinical', 'superadmin')

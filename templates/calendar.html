@@ -137,6 +137,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const calendarEl = document.getElementById('calendar');
     const eventModal = new bootstrap.Modal(document.getElementById('eventModal'));
     const isLoggedIn = {{ is_logged_in|tojson }};
+    const canApprove = {{ can_approve|default(false)|tojson }};
 
     // Calendar events data from Flask
     const allEvents = {{ calendar_events|tojson|safe }};
@@ -259,11 +260,11 @@ document.addEventListener('DOMContentLoaded', function() {
             </div>
             <div class="row mt-2">
                 <div class="col-sm-4"><strong>Dates:</strong></div>
-                <div class="col-sm-8">${startDate.toLocaleDateString()} ${endDate.getTime() !== startDate.getTime() ? 'to ' + endDate.toLocaleDateString() : ''}</div>
+                <div class="col-sm-8">${startDate.toLocaleDateString()} ${endDate.getTime() !== startDate.getTime() ? 'to ' + endDate.toLocaleDateString() : ''}${props.is_partial_day && props.partial_start_time && props.partial_end_time ? ` <span class="badge bg-info ms-1">Partial day ${props.partial_start_time}–${props.partial_end_time}</span>` : ''}</div>
             </div>
             <div class="row mt-2">
                 <div class="col-sm-4"><strong>Duration:</strong></div>
-                <div class="col-sm-8">${props.duration}${props.is_partial_day ? '' : ' days'}</div>
+                <div class="col-sm-8">${props.duration}</div>
             </div>
             ${props.reason ? `
             <div class="row mt-2">
@@ -271,9 +272,42 @@ document.addEventListener('DOMContentLoaded', function() {
                 <div class="col-sm-8">${props.reason}</div>
             </div>
             ` : ''}
+            ${(canApprove && props.status === 'pending' && !props.is_call_out && props.request_id) ? `
+            <hr class="my-3">
+            <div class="d-flex flex-column gap-2">
+                <a href="/approve_request/${props.request_id}?next=calendar"
+                   class="btn btn-success">
+                    <i class="fas fa-check me-1"></i>Approve Request
+                </a>
+                <button type="button" class="btn btn-outline-danger" id="showDenyFormBtn">
+                    <i class="fas fa-times me-1"></i>Deny Request
+                </button>
+                <form id="denyForm" method="POST"
+                      action="/deny_request/${props.request_id}"
+                      class="d-none mt-2">
+                    <input type="hidden" name="next" value="calendar">
+                    <label for="denialReason" class="form-label small mb-1">
+                        Reason for denial
+                    </label>
+                    <textarea name="denial_reason" id="denialReason"
+                              class="form-control form-control-sm mb-2"
+                              rows="2" required></textarea>
+                    <button type="submit" class="btn btn-danger btn-sm">
+                        Confirm Denial
+                    </button>
+                </form>
+            </div>
+            ` : ''}
         `;
 
         document.getElementById('eventDetails').innerHTML = detailsHtml;
+        const showDenyBtn = document.getElementById('showDenyFormBtn');
+        if (showDenyBtn) {
+            showDenyBtn.addEventListener('click', function() {
+                document.getElementById('denyForm').classList.remove('d-none');
+                showDenyBtn.classList.add('d-none');
+            });
+        }
         eventModal.show();
     }
     
@@ -310,7 +344,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     <div class="upcoming-event ${statusClass}">
                         <strong>${title}</strong><br>
                         <small class="text-muted">${event.extendedProps.type}${isCallOut ? ' (Call Out)' : ''}</small><br>
-                        <small>${startDate.toLocaleDateString()} • ${event.extendedProps.duration}${event.extendedProps.is_partial_day ? '' : ' days'}</small><br>
+                        <small>${startDate.toLocaleDateString()} • ${event.extendedProps.duration}${event.extendedProps.is_partial_day && event.extendedProps.partial_start_time ? ` (${event.extendedProps.partial_start_time}–${event.extendedProps.partial_end_time})` : ''}</small><br>
                         <span class="badge ${badgeClass} mt-1">${event.extendedProps.status.charAt(0).toUpperCase() + event.extendedProps.status.slice(1)}</span>
                     </div>
                 </div>
