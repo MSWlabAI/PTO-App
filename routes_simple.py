@@ -93,6 +93,40 @@ def register_routes(app):
 
         return render_template('login.html')
 
+    # Inject open PTO-sync discrepancies into dashboard templates for the
+    # three roles that should see and resolve them.
+    DISCREPANCY_DASHBOARDS = {
+        'clinical_dashboard',
+        'superadmin_dashboard',
+        'echo_supervisor_dashboard',
+    }
+    DISCREPANCY_ROLES = {'superadmin', 'echo_supervisor', 'clinical'}
+
+    @app.context_processor
+    def inject_pto_sync_discrepancies():
+        if request.endpoint not in DISCREPANCY_DASHBOARDS:
+            return {}
+        if session.get('user_role') not in DISCREPANCY_ROLES:
+            return {}
+        try:
+            return {'pto_sync_discrepancies': scheduler_sync.fetch_open_discrepancies()}
+        except Exception as e:
+            print(f"[scheduler_sync] context processor failed: {e}")
+            return {'pto_sync_discrepancies': []}
+
+    @app.route('/resolve_discrepancy/<discrepancy_id>', methods=['POST'])
+    @roles_required('superadmin', 'echo_supervisor', 'clinical')
+    def resolve_discrepancy(discrepancy_id):
+        """Proxy a resolve action through to the scheduler."""
+        ok = scheduler_sync.resolve_discrepancy(discrepancy_id)
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'ok': ok}), (200 if ok else 502)
+        if ok:
+            flash('Discrepancy marked resolved.', 'success')
+        else:
+            flash('Failed to resolve discrepancy.', 'error')
+        return redirect(url_for('dashboard'))
+
     @app.route('/dashboard')
     @roles_required('admin', 'clinical', 'superadmin', 'moa_supervisor', 'echo_supervisor')
     def dashboard():

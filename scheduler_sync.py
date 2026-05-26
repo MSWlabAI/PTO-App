@@ -16,6 +16,7 @@ from business_days import BusinessDaysCalculator
 
 SYNC_TIMEOUT_SECONDS = 10
 SYNC_PATH = "/api/echo-pto/sync"
+DISCREPANCIES_PATH = "/api/echo-pto/discrepancies"
 
 
 def is_echo_position(member) -> bool:
@@ -131,3 +132,57 @@ def sync_pto_request(pto_request, action: str) -> Optional[bool]:
 
     print(f"[scheduler_sync] {action} ok for request {pto_request.id} ({member.name})")
     return True
+
+
+def _scheduler_request(path: str, method: str = "GET", json_body=None):
+    """Internal helper for cross-app calls beyond the upsert/delete sync.
+    Returns the parsed JSON body on success, None on configuration or network
+    failure. Auth and timeout match sync_pto_request.
+    """
+    base_url = os.environ.get("MSW_SCHEDULER_URL")
+    secret = os.environ.get("PTO_SYNC_SECRET")
+    if not base_url or not secret:
+        return None
+    url = base_url.rstrip("/") + path
+    try:
+        resp = requests.request(
+            method,
+            url,
+            json=json_body,
+            headers={"Authorization": f"Bearer {secret}"},
+            timeout=SYNC_TIMEOUT_SECONDS,
+        )
+    except requests.RequestException as e:
+        print(f"[scheduler_sync] network error on {method} {path}: {e}")
+        return None
+    if resp.status_code >= 400:
+        print(f"[scheduler_sync] {method} {path} HTTP {resp.status_code}: {resp.text[:300]}")
+        return None
+    try:
+        return resp.json()
+    except ValueError:
+        return None
+
+
+def fetch_open_discrepancies() -> List[Dict]:
+    """Return open pto_sync_discrepancies from the scheduler. Empty list on
+    any failure — the popup just stays hidden in that case.
+    """
+    body = _scheduler_request(DISCREPANCIES_PATH)
+    if not body:
+        return []
+    return body.get("discrepancies") or []
+
+
+def resolve_discrepancy(discrepancy_id: str) -> bool:
+    """Ask the scheduler to mark one discrepancy resolved on behalf of the
+    PTO-App user. Returns True on success.
+    """
+    if not discrepancy_id:
+        return False
+    body = _scheduler_request(
+        f"{DISCREPANCIES_PATH}/{discrepancy_id}/resolve",
+        method="POST",
+        json_body={},
+    )
+    return body is not None and body.get("ok") is True
