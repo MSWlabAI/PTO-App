@@ -26,6 +26,9 @@ sendgrid>=6.10.0
 # Markdown rendering for user manual
 markdown>=3.5.0
 
+# HTTP client for outgoing scheduler sync
+requests>=2.31.0
+
 # Development/Testing (optional)
 # pytest>=7.4.0
 # pytest-flask>=1.2.0

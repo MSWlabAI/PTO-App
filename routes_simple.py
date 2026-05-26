@@ -6,6 +6,7 @@ from auth import roles_required, authenticate_user, login_user, logout_user, get
 from datetime import datetime, timedelta
 import pytz
 from email_service import EmailService
+import scheduler_sync
 
 # Define Eastern timezone
 EASTERN = pytz.timezone('US/Eastern')
@@ -1526,6 +1527,12 @@ def register_routes(app):
             except Exception as e:
                 print(f"Failed to send approval email: {str(e)}")
 
+            # Push to MSW Heart Scheduler (Echo techs only; best-effort).
+            try:
+                scheduler_sync.sync_pto_request(pto_request, 'upsert')
+            except Exception as e:
+                print(f"Failed to sync to scheduler: {str(e)}")
+
             flash(f'PTO request for {member.name} approved! {hours_to_deduct} hours deducted.', 'success')
 
         except Exception as e:
@@ -1711,14 +1718,22 @@ def register_routes(app):
         pto_request.coverage_arranged = request.form.get('coverage_arranged') == 'on'
 
         # If both are complete, move to approved status
+        newly_approved = False
         if pto_request.timekeeping_entered and pto_request.coverage_arranged:
             pto_request.status = 'approved'
+            newly_approved = True
             flash(f'PTO request for {pto_request.member.name} is now fully approved!', 'success')
 
             # No email sent when checklist is completed (per updated requirements)
 
         pto_request.updated_at = get_eastern_time()
         db.session.commit()
+
+        if newly_approved:
+            try:
+                scheduler_sync.sync_pto_request(pto_request, 'upsert')
+            except Exception as e:
+                print(f"Failed to sync to scheduler: {str(e)}")
 
         return redirect(url_for('workqueue_in_progress'))
 
@@ -1731,14 +1746,24 @@ def register_routes(app):
             member = pto_request.member
             employee_name = member.name if member else 'Unknown'
 
+            was_approved = pto_request.status in ['approved', 'in_progress', 'completed']
+
             # If the request was approved/in_progress/completed, restore the balance
-            if pto_request.status in ['approved', 'in_progress', 'completed']:
+            if was_approved:
                 hours_to_restore = pto_request.duration_hours
 
                 if pto_request.pto_type == 'Sick':
                     member.sick_balance_hours = float(member.sick_balance_hours or 0) + hours_to_restore
                 else:
                     member.pto_balance_hours = float(member.pto_balance_hours or 0) + hours_to_restore
+
+            # Remove from MSW Heart Scheduler before we lose the row. Only
+            # meaningful if it was ever synced (approved+ status, Echo tech).
+            if was_approved:
+                try:
+                    scheduler_sync.sync_pto_request(pto_request, 'delete')
+                except Exception as e:
+                    print(f"Failed to sync delete to scheduler: {str(e)}")
 
             # Delete associated CallOutRecord if exists
             from models import CallOutRecord
