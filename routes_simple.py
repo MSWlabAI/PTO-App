@@ -147,8 +147,7 @@ def register_routes(app):
         elif user_role == 'research_supervisor':
             return redirect(url_for('research_supervisor_dashboard'))
         elif user_role == 'scribe_research_supervisor':
-            # Default to scribes dashboard; she can switch to research via nav.
-            return redirect(url_for('scribe_supervisor_dashboard'))
+            return redirect(url_for('scribe_research_overview'))
         else:
             return redirect(url_for('index'))
 
@@ -259,9 +258,15 @@ def register_routes(app):
     @app.route('/dashboard/superadmin')
     @roles_required('superadmin')
     def superadmin_dashboard():
-        """Super admin dashboard"""
-        requests = pto_system.get_all_requests()
-        team_members = TeamMember.query.all()
+        """Super admin dashboard — scopes out the fully-isolated teams
+        (scribes, research) which only their own supervisor sees."""
+        ISOLATED = ['scribes', 'research']
+        requests = PTORequest.query.filter(
+            ~PTORequest.manager_team.in_(ISOLATED)
+        ).all()
+        team_members = TeamMember.query.join(Position).filter(
+            ~Position.team.in_(ISOLATED)
+        ).all()
 
         # Build calendar events with weekend splitting
         calendar_events = []
@@ -534,7 +539,9 @@ def register_routes(app):
             base_query = base_query.filter(PTORequest.manager_team == 'research')
         elif user_role == 'scribe_research_supervisor':
             base_query = base_query.filter(PTORequest.manager_team.in_(ISOLATED_TEAMS))
-        elif user_role != 'superadmin':
+        else:
+            # Everyone else (anonymous, admin, clinical, MOA, Echo, superadmin)
+            # never sees scribes or research — those teams are fully isolated.
             base_query = base_query.filter(~PTORequest.manager_team.in_(ISOLATED_TEAMS))
         all_requests = base_query.all()
 
@@ -682,16 +689,24 @@ def register_routes(app):
         can only fetch its own team. Superadmin sees all.
         """
         user_role = session.get('user_role')
-        allowed_team = {
-            'admin': 'admin',
-            'clinical': 'clinical',
-            'scribe_supervisor': 'scribes',
-            'research_supervisor': 'research',
-        }.get(user_role)
-        if user_role == 'scribe_research_supervisor' and team in ('scribes', 'research'):
-            pass  # allowed
-        elif user_role != 'superadmin' and team != allowed_team:
-            return jsonify({'error': 'Forbidden'}), 403
+        # Isolated teams are off-limits to superadmin by policy; only the
+        # dedicated supervisor roles can fetch them.
+        if team in ('scribes', 'research'):
+            if user_role == 'scribe_research_supervisor':
+                pass  # allowed for either isolated team
+            elif user_role == 'scribe_supervisor' and team == 'scribes':
+                pass
+            elif user_role == 'research_supervisor' and team == 'research':
+                pass
+            else:
+                return jsonify({'error': 'Forbidden'}), 403
+        else:
+            allowed_team = {
+                'admin': 'admin',
+                'clinical': 'clinical',
+            }.get(user_role)
+            if user_role != 'superadmin' and team != allowed_team:
+                return jsonify({'error': 'Forbidden'}), 403
         try:
             # Get PTO requests for the specified team
             requests = PTORequest.query.filter(
@@ -954,7 +969,7 @@ def register_routes(app):
                                now=get_eastern_time)
 
     @app.route('/dashboard/scribe_supervisor')
-    @roles_required('scribe_supervisor', 'scribe_research_supervisor', 'superadmin')
+    @roles_required('scribe_supervisor', 'scribe_research_supervisor')
     def scribe_supervisor_dashboard():
         """Scribe Supervisor dashboard — isolated from admin/clinical teams."""
         team_employees = TeamMember.query.join(Position).filter(
@@ -993,8 +1008,57 @@ def register_routes(app):
                                team_employees=team_employees,
                                now=get_eastern_time)
 
+    @app.route('/dashboard/scribe_research')
+    @roles_required('scribe_research_supervisor')
+    def scribe_research_overview():
+        """Combined home for managers who own both scribes and research.
+        Shows pending/approved/in-progress requests, employees, and a
+        team calendar union'd across both teams. Each row carries a team
+        badge so the source is obvious."""
+        ISOLATED = ['scribes', 'research']
+
+        team_employees = TeamMember.query.join(Position).filter(
+            Position.team.in_(ISOLATED),
+            ~TeamMember.name.contains('[INACTIVE]')
+        ).order_by(TeamMember.name).all()
+
+        pending_requests = PTORequest.query.filter(
+            PTORequest.status == 'pending',
+            PTORequest.manager_team.in_(ISOLATED)
+        ).all()
+        approved_requests = PTORequest.query.filter(
+            PTORequest.status == 'approved',
+            PTORequest.manager_team.in_(ISOLATED)
+        ).all()
+        in_progress_requests = PTORequest.query.filter(
+            PTORequest.status == 'in_progress',
+            PTORequest.manager_team.in_(ISOLATED)
+        ).all()
+
+        today_str = get_eastern_time().strftime('%Y-%m-%d')
+        currently_on_pto = PTORequest.query.filter(
+            PTORequest.status == 'approved',
+            PTORequest.manager_team.in_(ISOLATED),
+            PTORequest.start_date <= today_str,
+            PTORequest.end_date >= today_str
+        ).all()
+
+        pending_employees = PendingEmployee.query.filter(
+            PendingEmployee.status == 'pending',
+            PendingEmployee.team.in_(ISOLATED)
+        ).all()
+
+        return render_template('dashboard_scribe_research_supervisor.html',
+                               requests=pending_requests,
+                               approved_requests=approved_requests,
+                               in_progress_requests=in_progress_requests,
+                               pending_employees=pending_employees,
+                               currently_on_pto=currently_on_pto,
+                               team_employees=team_employees,
+                               now=get_eastern_time)
+
     @app.route('/dashboard/research_supervisor')
-    @roles_required('research_supervisor', 'scribe_research_supervisor', 'superadmin')
+    @roles_required('research_supervisor', 'scribe_research_supervisor')
     def research_supervisor_dashboard():
         """Research Supervisor dashboard — isolated from admin/clinical teams."""
         team_employees = TeamMember.query.join(Position).filter(
@@ -1830,7 +1894,10 @@ def register_routes(app):
 
         # Get in-progress requests based on role
         if user_role == 'superadmin':
-            in_progress_requests = PTORequest.query.filter_by(status='in_progress').all()
+            in_progress_requests = PTORequest.query.filter(
+                PTORequest.status == 'in_progress',
+                ~PTORequest.manager_team.in_(['scribes', 'research'])
+            ).all()
         elif user_role == 'admin':
             in_progress_requests = PTORequest.query.filter_by(status='in_progress', manager_team='admin').all()
         elif user_role == 'clinical':
@@ -1857,7 +1924,10 @@ def register_routes(app):
 
         # Get approved requests based on role
         if user_role == 'superadmin':
-            approved_requests = PTORequest.query.filter_by(status='approved').all()
+            approved_requests = PTORequest.query.filter(
+                PTORequest.status == 'approved',
+                ~PTORequest.manager_team.in_(['scribes', 'research'])
+            ).all()
         elif user_role == 'admin':
             approved_requests = PTORequest.query.filter_by(status='approved', manager_team='admin').all()
         elif user_role == 'clinical':
@@ -1885,7 +1955,10 @@ def register_routes(app):
 
         # Get completed requests based on role
         if user_role == 'superadmin':
-            completed_requests = PTORequest.query.filter_by(status='completed').all()
+            completed_requests = PTORequest.query.filter(
+                PTORequest.status == 'completed',
+                ~PTORequest.manager_team.in_(['scribes', 'research'])
+            ).all()
         elif user_role == 'admin':
             completed_requests = PTORequest.query.filter_by(status='completed', manager_team='admin').all()
         elif user_role == 'clinical':

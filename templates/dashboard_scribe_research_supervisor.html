@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Scribe Supervisor Dashboard - MSW CVI PTO Tracker{% endblock %}
+{% block title %}Scribes + Research Overview - MSW CVI PTO Tracker{% endblock %}
 
 {% block extra_head %}
 <!-- FullCalendar CSS -->
@@ -124,25 +124,23 @@
         <i class="fas fa-home me-1"></i>Home
     </a>
     <i class="fas fa-chevron-right" style="font-size: 0.65rem;"></i>
-    <span class="text-dark fw-medium">Scribe Supervisor Dashboard</span>
+    <span class="text-dark fw-medium">Scribes + Research Overview</span>
 </nav>
 
 <div class="row mb-4">
     <div class="col-12">
         <h2>
-            <i class="fas fa-user-pen me-2"></i>Scribe Supervisor Dashboard
+            <i class="fas fa-layer-group me-2"></i>Scribes + Research Overview
             <small class="text-muted">- Welcome {{ session.user_name }}</small>
         </h2>
-        {% if session.user_role == 'scribe_research_supervisor' %}
         <div class="d-flex flex-wrap gap-2 mt-2">
-            <a href="{{ url_for('scribe_research_overview') }}" class="btn btn-outline-secondary btn-sm">
-                <i class="fas fa-layer-group me-1"></i>Combined overview
+            <a href="{{ url_for('scribe_supervisor_dashboard') }}" class="btn btn-outline-info btn-sm">
+                <i class="fas fa-user-pen me-1"></i>Scribes only
             </a>
             <a href="{{ url_for('research_supervisor_dashboard') }}" class="btn btn-outline-warning btn-sm">
                 <i class="fas fa-microscope me-1"></i>Research only
             </a>
         </div>
-        {% endif %}
     </div>
 </div>
 
@@ -194,7 +192,10 @@
                         <tbody>
                             {% for request in currently_on_pto %}
                             <tr>
-                                <td><strong>{{ request.member.name if request.member else 'Unknown' }}</strong></td>
+                                <td>
+                                    <strong>{{ request.member.name if request.member else 'Unknown' }}</strong>
+                                    <span class="badge ms-1 bg-{% if request.manager_team == 'research' %}warning text-dark{% else %}info{% endif %}">{{ request.manager_team|title }}</span>
+                                </td>
                                 <td>
                                     {% if request.is_call_out %}
                                         <span class="badge bg-danger">Call Out</span>
@@ -337,7 +338,8 @@
                             {% for request in requests %}
                             <tr data-request-type="{% if request.is_call_out %}callout{% else %}pto{% endif %}" class="request-row">
                                 <td>
-                                    <strong>{{ request.member.name if request.member else 'Unknown' }}</strong><br>
+                                    <strong>{{ request.member.name if request.member else 'Unknown' }}</strong>
+                                    <span class="badge ms-1 bg-{% if request.manager_team == 'research' %}warning text-dark{% else %}info{% endif %}">{{ request.manager_team|title }}</span><br>
                                     <small class="text-muted">{{ request.member.position.name if request.member and request.member.position else 'No position' }}</small>
                                 </td>
                                 <td>
@@ -483,7 +485,8 @@
                             {% for request in in_progress_requests %}
                             <tr>
                                 <td>
-                                    <strong>{{ request.member.name if request.member else 'Unknown' }}</strong><br>
+                                    <strong>{{ request.member.name if request.member else 'Unknown' }}</strong>
+                                    <span class="badge ms-1 bg-{% if request.manager_team == 'research' %}warning text-dark{% else %}info{% endif %}">{{ request.manager_team|title }}</span><br>
                                     <small class="text-muted">{{ request.member.position.name if request.member and request.member.position else 'No position' }}</small>
                                 </td>
                                 <td>
@@ -567,7 +570,8 @@
                             {% set is_current = request.start_date <= now().strftime('%Y-%m-%d') and request.end_date >= now().strftime('%Y-%m-%d') %}
                             <tr class="{% if is_current %}table-info{% elif is_upcoming %}table-light{% endif %}">
                                 <td>
-                                    <strong>{{ request.member.name if request.member else 'Unknown' }}</strong><br>
+                                    <strong>{{ request.member.name if request.member else 'Unknown' }}</strong>
+                                    <span class="badge ms-1 bg-{% if request.manager_team == 'research' %}warning text-dark{% else %}info{% endif %}">{{ request.manager_team|title }}</span><br>
                                     <small class="text-muted">{{ request.member.position.name if request.member and request.member.position else 'No position' }}</small>
                                 </td>
                                 <td>
@@ -785,7 +789,10 @@ document.addEventListener('DOMContentLoaded', function() {
             center: 'title',
             right: 'dayGridMonth,dayGridWeek'
         },
-        events: '/api/team-calendar/scribes',
+        eventSources: [
+            { url: '/api/team-calendar/scribes' },
+            { url: '/api/team-calendar/research' }
+        ],
         height: 'auto',
         eventClick: function(info) {
             const props = info.event.extendedProps;

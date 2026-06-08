@@ -134,9 +134,14 @@
             <small class="text-muted">- Welcome {{ session.user_name }}</small>
         </h2>
         {% if session.user_role == 'scribe_research_supervisor' %}
-        <a href="{{ url_for('scribe_supervisor_dashboard') }}" class="btn btn-outline-secondary btn-sm">
-            <i class="fas fa-user-pen me-1"></i>Switch to Scribes Dashboard
-        </a>
+        <div class="d-flex flex-wrap gap-2 mt-2">
+            <a href="{{ url_for('scribe_research_overview') }}" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-layer-group me-1"></i>Combined overview
+            </a>
+            <a href="{{ url_for('scribe_supervisor_dashboard') }}" class="btn btn-outline-info btn-sm">
+                <i class="fas fa-user-pen me-1"></i>Scribes only
+            </a>
+        </div>
         {% endif %}
     </div>
 </div>
