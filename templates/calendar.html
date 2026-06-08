@@ -24,6 +24,9 @@
         <option value="">All Teams</option>
         <option value="admin">Admin</option>
         <option value="clinical">Clinical</option>
+        {% if session.user_role in ('superadmin', 'scribe_supervisor') %}
+        <option value="scribes">Scribes</option>
+        {% endif %}
     </select>
     <select id="positionFilter" class="form-select form-select-sm" style="width: auto; min-width: 160px;">
         <option value="">All Positions</option>
@@ -36,6 +39,9 @@
         <option value="Cardiac CT Techs (4th Floor)">Cardiac CT Tech</option>
         <option value="Secretary II">Secretary II</option>
         <option value="Leadership - Admin">Leadership</option>
+        {% if session.user_role in ('superadmin', 'scribe_supervisor') %}
+        <option value="Scribe">Scribe</option>
+        {% endif %}
     </select>
     <button type="button" class="btn btn-outline-secondary btn-sm" id="clearFilters">
         <i class="fas fa-times me-1"></i>Clear
