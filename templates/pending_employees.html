@@ -74,7 +74,7 @@
                             </div>
                         </td>
                         <td>
-                            <span class="badge bg-{{ 'primary' if employee.team == 'clinical' else 'secondary' }} mb-1">
+                            <span class="badge bg-{% if employee.team == 'clinical' %}primary{% elif employee.team == 'scribes' %}info{% else %}secondary{% endif %} mb-1">
                                 {{ employee.team|title }}
                             </span>
                             <br><small>{{ employee.position }}</small>

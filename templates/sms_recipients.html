@@ -41,7 +41,8 @@
                     <option value="">Select team...</option>
                     <option value="admin">Admin team only</option>
                     <option value="clinical">Clinical team only</option>
-                    <option value="both">Both teams</option>
+                    <option value="scribes">Scribes team only</option>
+                    <option value="both">Both teams (admin + clinical)</option>
                 </select>
             </div>
             <div class="col-md-2 d-flex align-items-end">
@@ -84,6 +85,8 @@
                                 <span class="badge bg-secondary">Admin</span>
                             {% elif r.team == 'clinical' %}
                                 <span class="badge bg-primary">Clinical</span>
+                            {% elif r.team == 'scribes' %}
+                                <span class="badge bg-info">Scribes</span>
                             {% else %}
                                 <span class="badge bg-dark">Both</span>
                             {% endif %}

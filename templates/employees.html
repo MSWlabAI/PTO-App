@@ -133,7 +133,7 @@
                         <td>{{ employee.email }}</td>
                         <td>{{ employee.phone or '-' }}</td>
                         <td>
-                            <span class="badge bg-{{ 'primary' if employee.team == 'clinical' else 'secondary' }}">
+                            <span class="badge bg-{% if employee.team == 'clinical' %}primary{% elif employee.team == 'scribes' %}info{% else %}secondary{% endif %}">
                                 {{ employee.team|title }}
                             </span>
                         </td>

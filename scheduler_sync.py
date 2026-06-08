@@ -19,16 +19,26 @@ SYNC_PATH = "/api/echo-pto/sync"
 DISCREPANCIES_PATH = "/api/echo-pto/discrepancies"
 
 
-def is_echo_position(member) -> bool:
-    """Only Echo techs exist in the scheduler today.
+SYNCED_POSITION_KEYWORDS = ("Echo", "Vascular")
 
-    The scheduler endpoint currently rejects any position_group other than
-    'echo', so gating here avoids pointless 400s.
+
+def position_group_for(member):
+    """Returns the scheduler position_group ('echo' or 'vascular') for a
+    member, or None if their position is not synced to the scheduler.
     """
     if not member or not getattr(member, "position", None):
-        return False
+        return None
     name = (member.position.name or "")
-    return "Echo" in name
+    if "Echo" in name:
+        return "echo"
+    if "Vascular" in name:
+        return "vascular"
+    return None
+
+
+def is_echo_position(member) -> bool:
+    """Back-compat alias: any position that syncs to echo_techs."""
+    return position_group_for(member) is not None
 
 
 def _time_block_for_partial(start_time: str, end_time: str) -> str:
@@ -85,7 +95,8 @@ def sync_pto_request(pto_request, action: str) -> Optional[bool]:
         return False
 
     member = pto_request.member
-    if not is_echo_position(member):
+    group = position_group_for(member)
+    if group is None:
         return None
 
     base_url = os.environ.get("MSW_SCHEDULER_URL")
@@ -103,7 +114,7 @@ def sync_pto_request(pto_request, action: str) -> Optional[bool]:
         "external_tech_id": str(member.id),
         "action": action,
         "source_request_id": str(pto_request.id),
-        "position_group": "echo",
+        "position_group": group,
         "reason": pto_request.reason or pto_request.pto_type,
         # Endpoint requires non-empty dates even on delete; harmless on that path
         # since the server filters by source_request_id, but we send a minimal

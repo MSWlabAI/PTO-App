@@ -128,7 +128,7 @@ def register_routes(app):
         return redirect(url_for('dashboard'))
 
     @app.route('/dashboard')
-    @roles_required('admin', 'clinical', 'superadmin', 'moa_supervisor', 'echo_supervisor')
+    @roles_required('admin', 'clinical', 'superadmin', 'moa_supervisor', 'echo_supervisor', 'scribe_supervisor')
     def dashboard():
         """Redirect to appropriate dashboard based on user role"""
         user_role = session.get('user_role')
@@ -142,6 +142,8 @@ def register_routes(app):
             return redirect(url_for('moa_supervisor_dashboard'))
         elif user_role == 'echo_supervisor':
             return redirect(url_for('echo_supervisor_dashboard'))
+        elif user_role == 'scribe_supervisor':
+            return redirect(url_for('scribe_supervisor_dashboard'))
         else:
             return redirect(url_for('index'))
 
@@ -485,6 +487,13 @@ def register_routes(app):
                 # Log error but don't fail the request
                 print(f"Failed to send submission email: {str(e)}")
 
+            # Auto-approved call-outs need to reach the scheduler too.
+            if call_out_flag:
+                try:
+                    scheduler_sync.sync_pto_request(pto_request, 'upsert')
+                except Exception as e:
+                    print(f"Failed to sync call-out to scheduler: {str(e)}")
+
             # Different success message for call-out vs regular PTO
             if call_out_flag:
                 flash(f'Call-out submitted successfully for {name}! Request ID: #{pto_request.id}', 'success')
@@ -498,16 +507,25 @@ def register_routes(app):
 
     @app.route('/calendar')
     def calendar():
-        """Calendar view of PTO requests - viewable by anyone; detail modal requires login"""
+        """Calendar view of PTO requests - viewable by anyone; detail modal requires login.
+        Scribes are isolated: their PTO is only visible to scribe_supervisor and
+        superadmin. Other viewers (anonymous, admin, clinical, MOA, Echo) never
+        see scribe entries here.
+        """
         is_logged_in = 'user_id' in session
-        can_approve = session.get('user_role') in (
-            'admin', 'clinical', 'superadmin', 'moa_supervisor', 'echo_supervisor'
+        user_role = session.get('user_role')
+        can_approve = user_role in (
+            'admin', 'clinical', 'superadmin', 'moa_supervisor', 'echo_supervisor', 'scribe_supervisor'
         )
 
-        # Get all PTO requests (approved and pending) for calendar display
-        all_requests = PTORequest.query.filter(
+        base_query = PTORequest.query.filter(
             PTORequest.status.in_(['approved', 'pending'])
-        ).all()
+        )
+        if user_role == 'scribe_supervisor':
+            base_query = base_query.filter(PTORequest.manager_team == 'scribes')
+        elif user_role != 'superadmin':
+            base_query = base_query.filter(PTORequest.manager_team != 'scribes')
+        all_requests = base_query.all()
 
         # Convert PTO requests to FullCalendar events format
         calendar_events = []
@@ -648,7 +666,18 @@ def register_routes(app):
 
     @app.route('/api/team-calendar/<team>')
     def get_team_calendar(team):
-        """API endpoint to get team-specific calendar events"""
+        """API endpoint to get team-specific calendar events.
+        Role-gated to prevent cross-team data leakage: each manager role
+        can only fetch its own team. Superadmin sees all.
+        """
+        user_role = session.get('user_role')
+        allowed_team = {
+            'admin': 'admin',
+            'clinical': 'clinical',
+            'scribe_supervisor': 'scribes',
+        }.get(user_role)
+        if user_role != 'superadmin' and team != allowed_team:
+            return jsonify({'error': 'Forbidden'}), 403
         try:
             # Get PTO requests for the specified team
             requests = PTORequest.query.filter(
@@ -910,8 +939,48 @@ def register_routes(app):
                                team_employees=team_employees,
                                now=get_eastern_time)
 
+    @app.route('/dashboard/scribe_supervisor')
+    @roles_required('scribe_supervisor', 'superadmin')
+    def scribe_supervisor_dashboard():
+        """Scribe Supervisor dashboard — isolated from admin/clinical teams."""
+        team_employees = TeamMember.query.join(Position).filter(
+            Position.team == 'scribes',
+            ~TeamMember.name.contains('[INACTIVE]')
+        ).order_by(TeamMember.name).all()
+
+        pending_requests = PTORequest.query.filter_by(
+            status='pending', manager_team='scribes'
+        ).all()
+        approved_requests = PTORequest.query.filter_by(
+            status='approved', manager_team='scribes'
+        ).all()
+        in_progress_requests = PTORequest.query.filter_by(
+            status='in_progress', manager_team='scribes'
+        ).all()
+
+        today_str = get_eastern_time().strftime('%Y-%m-%d')
+        currently_on_pto = PTORequest.query.filter_by(
+            status='approved', manager_team='scribes'
+        ).filter(
+            PTORequest.start_date <= today_str,
+            PTORequest.end_date >= today_str
+        ).all()
+
+        pending_employees = PendingEmployee.query.filter_by(
+            status='pending', team='scribes'
+        ).all()
+
+        return render_template('dashboard_scribe_supervisor.html',
+                               requests=pending_requests,
+                               approved_requests=approved_requests,
+                               in_progress_requests=in_progress_requests,
+                               pending_employees=pending_employees,
+                               currently_on_pto=currently_on_pto,
+                               team_employees=team_employees,
+                               now=get_eastern_time)
+
     @app.route('/employees')
-    @roles_required('admin', 'clinical', 'superadmin', 'moa_supervisor', 'echo_supervisor')
+    @roles_required('admin', 'clinical', 'superadmin', 'moa_supervisor', 'echo_supervisor', 'scribe_supervisor')
     def employees():
         """Employee management page - filtered by team and position parameters"""
         # Check for query parameters
@@ -919,14 +988,8 @@ def register_routes(app):
         position_filter = request.args.get('position', None)
 
         # Get positions and build query based on team filter
-        if team_filter == 'admin':
-            # Show admin team employees only
-            positions = Position.query.filter_by(team='admin').order_by(Position.name).all()
-            pos_ids = [p.id for p in positions]
-            query = TeamMember.query.filter(TeamMember.position_id.in_(pos_ids))
-        elif team_filter == 'clinical':
-            # Show clinical team employees only
-            positions = Position.query.filter_by(team='clinical').order_by(Position.name).all()
+        if team_filter in ('admin', 'clinical', 'scribes'):
+            positions = Position.query.filter_by(team=team_filter).order_by(Position.name).all()
             pos_ids = [p.id for p in positions]
             query = TeamMember.query.filter(TeamMember.position_id.in_(pos_ids))
         else:
@@ -963,7 +1026,7 @@ def register_routes(app):
                                current_position=position_filter)
 
     @app.route('/pending_employees')
-    @roles_required('admin', 'clinical', 'superadmin')
+    @roles_required('admin', 'clinical', 'superadmin', 'scribe_supervisor')
     def pending_employees():
         """View pending employee registrations"""
         pending_employees = PendingEmployee.query.all()
@@ -971,7 +1034,7 @@ def register_routes(app):
         return render_template('pending_employees.html', pending_employees=pending_employees, total_pending=total_pending)
 
     @app.route('/add_employee', methods=['GET', 'POST'])
-    @roles_required('admin', 'clinical', 'superadmin')
+    @roles_required('admin', 'clinical', 'superadmin', 'scribe_supervisor')
     def add_employee():
         """Add new employee"""
         print(f"DEBUG: add_employee called with method: {request.method}")
@@ -1011,7 +1074,7 @@ def register_routes(app):
         return render_template('add_employee.html')
 
     @app.route('/employee/<int:employee_id>')
-    @roles_required('admin', 'clinical', 'superadmin', 'moa_supervisor', 'echo_supervisor')
+    @roles_required('admin', 'clinical', 'superadmin', 'moa_supervisor', 'echo_supervisor', 'scribe_supervisor')
     def employee_detail(employee_id):
         """View employee details"""
         from datetime import datetime, timedelta
@@ -1133,7 +1196,7 @@ def register_routes(app):
             return f"Error loading employee details: {str(e)}", 500
 
     @app.route('/api/employee/<int:employee_id>/pto-events')
-    @roles_required('admin', 'clinical', 'superadmin', 'moa_supervisor', 'echo_supervisor')
+    @roles_required('admin', 'clinical', 'superadmin', 'moa_supervisor', 'echo_supervisor', 'scribe_supervisor')
     def get_employee_pto_events(employee_id):
         """API endpoint to get PTO events for a specific employee (for calendar view)"""
         from datetime import timedelta
@@ -1227,7 +1290,7 @@ def register_routes(app):
         return jsonify(events)
 
     @app.route('/api/employee/<int:employee_id>/tardiness', methods=['POST'])
-    @roles_required('admin', 'clinical', 'superadmin', 'moa_supervisor', 'echo_supervisor')
+    @roles_required('admin', 'clinical', 'superadmin', 'moa_supervisor', 'echo_supervisor', 'scribe_supervisor')
     def add_tardiness(employee_id):
         """API endpoint to add a tardiness record for an employee"""
         employee = TeamMember.query.get_or_404(employee_id)
@@ -1267,7 +1330,7 @@ def register_routes(app):
         })
 
     @app.route('/api/employee/<int:employee_id>/tardiness/<int:tardiness_id>', methods=['DELETE'])
-    @roles_required('admin', 'clinical', 'superadmin', 'moa_supervisor', 'echo_supervisor')
+    @roles_required('admin', 'clinical', 'superadmin', 'moa_supervisor', 'echo_supervisor', 'scribe_supervisor')
     def delete_tardiness(employee_id, tardiness_id):
         """API endpoint to delete a tardiness record"""
         tardiness = TardinessRecord.query.filter_by(id=tardiness_id, member_id=employee_id).first_or_404()
@@ -1278,7 +1341,7 @@ def register_routes(app):
         return jsonify({'success': True, 'message': 'Tardiness record deleted'})
 
     @app.route('/api/request/<int:request_id>/classify-callout', methods=['POST'])
-    @roles_required('admin', 'clinical', 'superadmin', 'moa_supervisor', 'echo_supervisor')
+    @roles_required('admin', 'clinical', 'superadmin', 'moa_supervisor', 'echo_supervisor', 'scribe_supervisor')
     def classify_callout(request_id):
         """Manager-only: update a call-out's classification (sick or fmla)."""
         data = request.get_json() or {}
@@ -1301,7 +1364,7 @@ def register_routes(app):
         return jsonify({'success': True, 'classification': classification})
 
     @app.route('/employee/edit/<int:employee_id>', methods=['GET', 'POST'])
-    @roles_required('admin', 'clinical', 'superadmin')
+    @roles_required('admin', 'clinical', 'superadmin', 'scribe_supervisor')
     def edit_employee(employee_id):
         """Edit employee details"""
         employee = TeamMember.query.get_or_404(employee_id)
@@ -1329,7 +1392,7 @@ def register_routes(app):
         return render_template('edit_employee.html', employee=employee)
 
     @app.route('/api/positions-list')
-    @roles_required('admin', 'clinical', 'superadmin')
+    @roles_required('admin', 'clinical', 'superadmin', 'scribe_supervisor')
     def api_positions_list():
         """API endpoint to get all positions with IDs for dropdowns"""
         positions = Position.query.order_by(Position.team, Position.name).all()
@@ -1338,7 +1401,7 @@ def register_routes(app):
         })
 
     @app.route('/api/employee/<int:employee_id>/update', methods=['POST'])
-    @roles_required('admin', 'clinical', 'superadmin')
+    @roles_required('admin', 'clinical', 'superadmin', 'scribe_supervisor')
     def update_employee_field(employee_id):
         """API endpoint to update a single employee field inline"""
         employee = TeamMember.query.get_or_404(employee_id)
@@ -1405,7 +1468,7 @@ def register_routes(app):
             return jsonify({'success': False, 'error': str(e)}), 500
 
     @app.route('/api/employee/<int:employee_id>/add-pto', methods=['POST'])
-    @roles_required('admin', 'clinical', 'superadmin', 'moa_supervisor', 'echo_supervisor')
+    @roles_required('admin', 'clinical', 'superadmin', 'moa_supervisor', 'echo_supervisor', 'scribe_supervisor')
     def add_pto_for_employee(employee_id):
         """API endpoint to create a PTO request on behalf of an employee"""
         employee = TeamMember.query.get_or_404(employee_id)
@@ -1472,6 +1535,13 @@ def register_routes(app):
             except Exception as e:
                 print(f"Failed to send submission email: {str(e)}")
 
+            # Auto-approved call-outs need to reach the scheduler too.
+            if is_call_out:
+                try:
+                    scheduler_sync.sync_pto_request(pto_request, 'upsert')
+                except Exception as e:
+                    print(f"Failed to sync call-out to scheduler: {str(e)}")
+
             # Different success message for call-out vs regular PTO
             if is_call_out:
                 message = f'Call-out submitted and auto-approved for {employee.name}. Sick time deducted: {pto_request.duration_hours} hrs'
@@ -1489,7 +1559,7 @@ def register_routes(app):
             return jsonify({'success': False, 'error': str(e)}), 500
 
     @app.route('/employee/delete/<int:employee_id>', methods=['POST'])
-    @roles_required('admin', 'clinical', 'superadmin')
+    @roles_required('admin', 'clinical', 'superadmin', 'scribe_supervisor')
     def delete_employee(employee_id):
         """Delete or deactivate employee"""
         employee = TeamMember.query.get_or_404(employee_id)
@@ -1525,7 +1595,7 @@ def register_routes(app):
         return redirect(url_for('employees'))
 
     @app.route('/approve_request/<int:request_id>')
-    @roles_required('admin', 'clinical', 'superadmin', 'moa_supervisor', 'echo_supervisor')
+    @roles_required('admin', 'clinical', 'superadmin', 'moa_supervisor', 'echo_supervisor', 'scribe_supervisor')
     def approve_request(request_id):
         """Approve a PTO request and deduct hours from balance"""
         next_view = 'calendar' if request.args.get('next') == 'calendar' else 'dashboard'
@@ -1575,7 +1645,7 @@ def register_routes(app):
         return redirect(url_for(next_view))
 
     @app.route('/deny_request/<int:request_id>', methods=['POST'])
-    @roles_required('admin', 'clinical', 'superadmin', 'moa_supervisor', 'echo_supervisor')
+    @roles_required('admin', 'clinical', 'superadmin', 'moa_supervisor', 'echo_supervisor', 'scribe_supervisor')
     def deny_request(request_id):
         """Deny a PTO request"""
         next_view = 'calendar' if request.form.get('next') == 'calendar' else 'dashboard'
@@ -1604,7 +1674,7 @@ def register_routes(app):
         return redirect(url_for(next_view))
 
     @app.route('/approve_employee/<int:employee_id>')
-    @roles_required('admin', 'clinical', 'superadmin')
+    @roles_required('admin', 'clinical', 'superadmin', 'scribe_supervisor')
     def approve_employee(employee_id):
         """Approve a pending employee registration"""
         pending_employee = PendingEmployee.query.get_or_404(employee_id)
@@ -1618,6 +1688,8 @@ def register_routes(app):
         elif user_role == 'admin' and pending_employee.team == 'admin':
             can_approve = True
         elif user_role == 'clinical' and pending_employee.team == 'clinical':
+            can_approve = True
+        elif user_role == 'scribe_supervisor' and pending_employee.team == 'scribes':
             can_approve = True
 
         if not can_approve:
@@ -1651,7 +1723,7 @@ def register_routes(app):
         return redirect(url_for('dashboard'))
 
     @app.route('/deny_employee/<int:employee_id>', methods=['POST'])
-    @roles_required('admin', 'clinical', 'superadmin')
+    @roles_required('admin', 'clinical', 'superadmin', 'scribe_supervisor')
     def deny_employee(employee_id):
         """Deny a pending employee registration"""
         pending_employee = PendingEmployee.query.get_or_404(employee_id)
@@ -1665,6 +1737,8 @@ def register_routes(app):
         elif user_role == 'admin' and pending_employee.team == 'admin':
             can_deny = True
         elif user_role == 'clinical' and pending_employee.team == 'clinical':
+            can_deny = True
+        elif user_role == 'scribe_supervisor' and pending_employee.team == 'scribes':
             can_deny = True
 
         if not can_deny:
@@ -1687,7 +1761,7 @@ def register_routes(app):
         return redirect(url_for('dashboard'))
 
     @app.route('/workqueue/in_progress')
-    @roles_required('admin', 'clinical', 'superadmin')
+    @roles_required('admin', 'clinical', 'superadmin', 'scribe_supervisor')
     def workqueue_in_progress():
         """View in-progress PTO requests with checklist"""
         user_role = session.get('user_role', '')
@@ -1699,13 +1773,15 @@ def register_routes(app):
             in_progress_requests = PTORequest.query.filter_by(status='in_progress', manager_team='admin').all()
         elif user_role == 'clinical':
             in_progress_requests = PTORequest.query.filter_by(status='in_progress', manager_team='clinical').all()
+        elif user_role == 'scribe_supervisor':
+            in_progress_requests = PTORequest.query.filter_by(status='in_progress', manager_team='scribes').all()
         else:
             in_progress_requests = []
 
         return render_template('workqueue_in_progress.html', requests=in_progress_requests, now=get_eastern_time)
 
     @app.route('/workqueue/approved')
-    @roles_required('admin', 'clinical', 'superadmin')
+    @roles_required('admin', 'clinical', 'superadmin', 'scribe_supervisor')
     def workqueue_approved():
         """View approved PTO requests"""
         user_role = session.get('user_role', '')
@@ -1717,6 +1793,8 @@ def register_routes(app):
             approved_requests = PTORequest.query.filter_by(status='approved', manager_team='admin').all()
         elif user_role == 'clinical':
             approved_requests = PTORequest.query.filter_by(status='approved', manager_team='clinical').all()
+        elif user_role == 'scribe_supervisor':
+            approved_requests = PTORequest.query.filter_by(status='approved', manager_team='scribes').all()
         else:
             approved_requests = []
 
@@ -1724,7 +1802,7 @@ def register_routes(app):
         return render_template('workqueue_approved.html', requests=approved_requests, now=get_eastern_time, datetime=datetime)
 
     @app.route('/workqueue/completed')
-    @roles_required('admin', 'clinical', 'superadmin')
+    @roles_required('admin', 'clinical', 'superadmin', 'scribe_supervisor')
     def workqueue_completed():
         """View completed PTO requests"""
         user_role = session.get('user_role', '')
@@ -1736,13 +1814,15 @@ def register_routes(app):
             completed_requests = PTORequest.query.filter_by(status='completed', manager_team='admin').all()
         elif user_role == 'clinical':
             completed_requests = PTORequest.query.filter_by(status='completed', manager_team='clinical').all()
+        elif user_role == 'scribe_supervisor':
+            completed_requests = PTORequest.query.filter_by(status='completed', manager_team='scribes').all()
         else:
             completed_requests = []
 
         return render_template('workqueue_completed.html', requests=completed_requests, now=get_eastern_time)
 
     @app.route('/update_checklist/<int:request_id>', methods=['POST'])
-    @roles_required('admin', 'clinical', 'superadmin')
+    @roles_required('admin', 'clinical', 'superadmin', 'scribe_supervisor')
     def update_checklist(request_id):
         """Update checklist items for in-progress request"""
         pto_request = PTORequest.query.get_or_404(request_id)
@@ -1772,7 +1852,7 @@ def register_routes(app):
         return redirect(url_for('workqueue_in_progress'))
 
     @app.route('/delete_request/<int:request_id>', methods=['POST'])
-    @roles_required('admin', 'clinical', 'superadmin')
+    @roles_required('admin', 'clinical', 'superadmin', 'scribe_supervisor')
     def delete_request(request_id):
         """Delete a PTO request (admin only) - restores balance if approved/in_progress/completed"""
         try:
@@ -1816,7 +1896,7 @@ def register_routes(app):
         return redirect(url_for('dashboard'))
 
     @app.route('/edit_request/<int:request_id>', methods=['GET', 'POST'])
-    @roles_required('admin', 'clinical', 'superadmin')
+    @roles_required('admin', 'clinical', 'superadmin', 'scribe_supervisor')
     def edit_request(request_id):
         """Edit a PTO request (admin only) - adjusts balance if dates/type change"""
         pto_request = PTORequest.query.get_or_404(request_id)
@@ -1859,6 +1939,17 @@ def register_routes(app):
                         member.pto_balance_hours = float(member.pto_balance_hours or 0) - new_hours
 
                 db.session.commit()
+
+                # If this was an approved request, the scheduler has stale rows
+                # for the old dates. Delete and re-upsert so it reflects the
+                # edit. Delete is keyed on source_request_id, not on dates, so
+                # it correctly removes the prior rows regardless of new dates.
+                if was_approved:
+                    try:
+                        scheduler_sync.sync_pto_request(pto_request, 'delete')
+                        scheduler_sync.sync_pto_request(pto_request, 'upsert')
+                    except Exception as e:
+                        print(f"Failed to sync edit to scheduler: {str(e)}")
 
                 flash(f'PTO request for {member.name} has been updated successfully.', 'success')
                 return redirect(url_for('dashboard'))
@@ -1906,7 +1997,7 @@ def register_routes(app):
         return redirect(url_for('index'))
 
     @app.route('/change-password', methods=['GET', 'POST'])
-    @roles_required('admin', 'clinical', 'superadmin', 'moa_supervisor', 'echo_supervisor')
+    @roles_required('admin', 'clinical', 'superadmin', 'moa_supervisor', 'echo_supervisor', 'scribe_supervisor')
     def change_password():
         """Allow managers to change their password"""
         from werkzeug.security import check_password_hash, generate_password_hash

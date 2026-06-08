@@ -1,0 +1,890 @@
+{% extends "base.html" %}
+
+{% block title %}Scribe Supervisor Dashboard - MSW CVI PTO Tracker{% endblock %}
+
+{% block extra_head %}
+<!-- FullCalendar CSS -->
+<link href='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.9/index.global.min.css' rel='stylesheet' />
+<style>
+.submission-timestamp {
+    min-width: 120px;
+    font-size: 0.9em;
+    line-height: 1.3;
+}
+
+.submission-timestamp strong {
+    font-weight: 600;
+    font-size: 1.05em;
+}
+
+.submission-timestamp small {
+    font-size: 0.75em;
+    line-height: 1.2;
+}
+
+.submission-timestamp .fas {
+    margin-right: 0.3em;
+}
+
+/* Tab content styling */
+.tab-content {
+    padding-top: 20px;
+}
+
+.nav-tabs .nav-link {
+    color: #ffffff;
+    font-weight: 500;
+    background-color: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    margin-right: 2px;
+}
+
+.nav-tabs .nav-link:hover {
+    color: #ffffff;
+    background-color: rgba(255, 255, 255, 0.2);
+}
+
+.nav-tabs .nav-link.active {
+    color: #0d6efd;
+    font-weight: 600;
+    background-color: #ffffff;
+    border-color: #ffffff #ffffff #fff;
+}
+
+.nav-tabs .badge {
+    margin-left: 5px;
+}
+
+/* Filter buttons */
+.filter-buttons {
+    padding: 15px;
+    background-color: #f8f9fa;
+    border-radius: 5px;
+    margin-bottom: 15px;
+}
+
+.filter-buttons .btn-group {
+    width: 100%;
+}
+
+.filter-buttons .btn {
+    flex: 1;
+}
+
+.filter-badge {
+    font-size: 0.75em;
+    vertical-align: middle;
+    margin-left: 5px;
+}
+
+/* Call-out detail styles */
+.call-out-details {
+    background-color: #f8f9fa;
+    padding: 15px;
+    border-left: 4px solid #dc3545;
+    margin: 10px 0;
+}
+
+.call-out-badge {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 3px;
+    font-size: 0.85em;
+    margin-right: 8px;
+}
+
+.call-out-badge.phone {
+    background-color: #17a2b8;
+    color: white;
+}
+
+.call-out-badge.sms {
+    background-color: #28a745;
+    color: white;
+}
+
+.toggle-details {
+    cursor: pointer;
+    color: #0d6efd;
+    text-decoration: underline;
+}
+
+.toggle-details:hover {
+    color: #0a58ca;
+}
+.fc-bg-event { background-color: #e8dcf5 !important; opacity: 1 !important; }
+.holiday-event { background: transparent !important; border: none !important; box-shadow: none !important; font-weight: 600 !important; color: #7c3aed !important; font-size: 0.85rem !important; }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Breadcrumb Navigation -->
+<nav class="d-flex align-items-center gap-1 small text-muted mb-2">
+    <a href="{{ url_for('index') }}" class="text-muted text-decoration-none hover-primary">
+        <i class="fas fa-home me-1"></i>Home
+    </a>
+    <i class="fas fa-chevron-right" style="font-size: 0.65rem;"></i>
+    <span class="text-dark fw-medium">Scribe Supervisor Dashboard</span>
+</nav>
+
+<div class="row mb-4">
+    <div class="col-12">
+        <h2>
+            <i class="fas fa-user-pen me-2"></i>Scribe Supervisor Dashboard
+            <small class="text-muted">- Welcome {{ session.user_name }}</small>
+        </h2>
+    </div>
+</div>
+
+<!-- Quick Actions -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card bg-light">
+            <div class="card-body">
+                <h6 class="card-title">
+                    <i class="fas fa-bolt me-2"></i>Quick Actions
+                </h6>
+                <div class="d-flex flex-wrap gap-2">
+                    <a href="{{ url_for('employees') }}" class="btn btn-primary">
+                        <i class="fas fa-users me-2"></i>Manage Employees
+                    </a>
+                    <a href="{{ url_for('add_employee') }}" class="btn btn-success">
+                        <i class="fas fa-user-plus me-2"></i>Add Employee
+                    </a>
+                    <a href="{{ url_for('calendar') }}" class="btn btn-info">
+                        <i class="fas fa-calendar me-2"></i>View Calendar
+                    </a>
+                    <a href="{{ url_for('manager_manual') }}" class="btn btn-secondary">
+                        <i class="fas fa-book me-2"></i>Manager Manual
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Currently on PTO and My Team Row -->
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0"><i class="fas fa-umbrella-beach me-2"></i>Currently on PTO</h5>
+            </div>
+            <div class="card-body">
+                {% if currently_on_pto %}
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>Employee</th>
+                                <th>Type</th>
+                                <th>Returns</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for request in currently_on_pto %}
+                            <tr>
+                                <td><strong>{{ request.member.name if request.member else 'Unknown' }}</strong></td>
+                                <td>
+                                    {% if request.is_call_out %}
+                                        <span class="badge bg-danger">Call Out</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">{{ request.pto_type }}</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% set end_date = request.end_date %}
+                                    {% set today = now().strftime('%Y-%m-%d') %}
+                                    {% if end_date == today %}
+                                        <span class="badge bg-warning text-dark">Today</span>
+                                    {% else %}
+                                        {{ request.end_date }}
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-3">
+                    <i class="fas fa-check-circle fa-2x text-success mb-2"></i>
+                    <p class="text-muted mb-0">No employees currently on PTO</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header bg-secondary text-white">
+                <h5 class="mb-0"><i class="fas fa-users me-2"></i>My Team (<span id="teamCount">{{ team_employees|length }}</span> members)</h5>
+            </div>
+            <div class="card-body">
+                {% if team_employees %}
+                <div class="mb-2">
+                    <input type="text" class="form-control form-control-sm" id="teamSearch" placeholder="Search team members...">
+                </div>
+                <div class="list-group list-group-flush" id="teamList" style="max-height: 250px; overflow-y: auto;">
+                    {% for employee in team_employees %}
+                    <a href="{{ url_for('employee_detail', employee_id=employee.id) }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-2 team-member-item" data-name="{{ employee.name|lower }}" data-position="{{ (employee.position.name if employee.position else '')|lower }}">
+                        <div>
+                            <strong>{{ employee.name }}</strong>
+                            <br><small class="text-muted">{{ employee.position.name if employee.position else 'No position' }}</small>
+                        </div>
+                        <i class="fas fa-chevron-right text-muted"></i>
+                    </a>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center py-3">
+                    <i class="fas fa-users fa-2x text-muted mb-2"></i>
+                    <p class="text-muted mb-0">No team members found</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Dashboard Tabs -->
+<div class="card">
+    <div class="card-header">
+        <ul class="nav nav-tabs card-header-tabs" role="tablist">
+            <li class="nav-item">
+                <a class="nav-link active" id="pending-pto-tab" data-bs-toggle="tab" href="#pending-pto" role="tab">
+                    <i class="fas fa-clock"></i> Pending PTO
+                    {% if requests|length > 0 %}
+                        <span class="badge bg-danger">{{ requests|length }}</span>
+                    {% endif %}
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" id="in-progress-tab" data-bs-toggle="tab" href="#in-progress" role="tab">
+                    <i class="fas fa-tasks"></i> In Progress
+                    {% if in_progress_requests|length > 0 %}
+                        <span class="badge bg-warning text-dark">{{ in_progress_requests|length }}</span>
+                    {% endif %}
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" id="approved-tab" data-bs-toggle="tab" href="#approved" role="tab">
+                    <i class="fas fa-check-circle"></i> Approved
+                    {% if approved_requests|length > 0 %}
+                        <span class="badge bg-success">{{ approved_requests|length }}</span>
+                    {% endif %}
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" id="employees-tab" data-bs-toggle="tab" href="#employees-registrations" role="tab">
+                    <i class="fas fa-user-plus"></i> Employee Registrations
+                    {% if pending_employees|length > 0 %}
+                        <span class="badge bg-info">{{ pending_employees|length }}</span>
+                    {% endif %}
+                </a>
+            </li>
+        </ul>
+    </div>
+
+    <div class="card-body">
+        <div class="tab-content">
+            <!-- Pending PTO Tab -->
+            <div class="tab-pane fade show active" id="pending-pto" role="tabpanel">
+                {% if requests %}
+                <!-- Filter Controls -->
+                <div class="filter-buttons">
+                    <div class="btn-group" role="group" aria-label="Filter requests">
+                        <input type="radio" class="btn-check" name="pendingFilter" id="filterAllPending" value="all" checked autocomplete="off">
+                        <label class="btn btn-outline-primary" for="filterAllPending">
+                            All Requests <span class="filter-badge badge bg-primary" id="countAllPending">{{ requests|length }}</span>
+                        </label>
+
+                        <input type="radio" class="btn-check" name="pendingFilter" id="filterPTOOnly" value="pto" autocomplete="off">
+                        <label class="btn btn-outline-success" for="filterPTOOnly">
+                            PTO Only <span class="filter-badge badge bg-success" id="countPTOOnly">0</span>
+                        </label>
+
+                        <input type="radio" class="btn-check" name="pendingFilter" id="filterCallOutsOnly" value="callout" autocomplete="off">
+                        <label class="btn btn-outline-danger" for="filterCallOutsOnly">
+                            Call-Outs Only <span class="filter-badge badge bg-danger" id="countCallOutsOnly">0</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Employee</th>
+                                <th>Dates</th>
+                                <th>Type</th>
+                                <th>Submitted</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for request in requests %}
+                            <tr data-request-type="{% if request.is_call_out %}callout{% else %}pto{% endif %}" class="request-row">
+                                <td>
+                                    <strong>{{ request.member.name if request.member else 'Unknown' }}</strong><br>
+                                    <small class="text-muted">{{ request.member.position.name if request.member and request.member.position else 'No position' }}</small>
+                                </td>
+                                <td>
+                                    <div>
+                                        <i class="fas fa-calendar-alt text-primary me-1"></i>
+                                        {{ request.start_date }} to {{ request.end_date }}
+                                    </div>
+                                    {% if request.is_partial_day %}
+                                    <small class="text-muted">
+                                        <i class="fas fa-clock"></i> {{ request.start_time }} - {{ request.end_time }}
+                                    </small>
+                                    {% endif %}
+                                    <div class="mt-1">
+                                        <span class="badge bg-info">
+                                            {% if request.is_partial_day %}
+                                                {{ "%.1f"|format(request.duration_hours) }} hrs (partial day)
+                                            {% elif request.get_pto_breakdown %}
+                                                {% set breakdown = request.get_pto_breakdown() %}
+                                                {{ breakdown.business_days }} business days
+                                            {% else %}
+                                                {{ request.duration_days }} days
+                                            {% endif %}
+                                        </span>
+                                    </div>
+                                </td>
+                                <td>
+                                    {% if request.is_call_out %}
+                                        <span class="badge bg-danger">
+                                            <i class="fas fa-exclamation-circle"></i> CALL OUT
+                                        </span>
+                                        <br>
+                                        <small class="toggle-details" onclick="toggleCallOutDetails({{ request.id }})">
+                                            <i class="fas fa-info-circle"></i> View Details
+                                        </small>
+                                    {% else %}
+                                        <span class="badge bg-secondary">{{ request.pto_type }}</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div class="submission-timestamp">
+                                        {% if request.submitted_at %}
+                                        <strong>{{ request.submitted_at.strftime('%m/%d/%Y') }}</strong>
+                                        <br><small class="text-muted">
+                                            <i class="fas fa-clock"></i> {{ request.submitted_at.strftime('%I:%M %p') }}
+                                        </small>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="badge status-{{ request.status }}">
+                                        {{ request.status|title }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <a href="{{ url_for('approve_request', request_id=request.id) }}"
+                                       class="btn btn-success btn-sm btn-approve me-1"
+                                       data-bs-toggle="tooltip" title="Approve Request">
+                                        <i class="fas fa-check"></i>
+                                    </a>
+                                    <form method="POST" action="{{ url_for('deny_request', request_id=request.id) }}" style="display: inline;">
+                                        <button type="submit" class="btn btn-danger btn-sm btn-deny"
+                                                data-bs-toggle="tooltip" title="Deny Request">
+                                            <i class="fas fa-times"></i>
+                                        </button>
+                                    </form>
+                                    <a href="{{ url_for('edit_request', request_id=request.id) }}"
+                                       class="btn btn-warning btn-sm ms-1"
+                                       data-bs-toggle="tooltip" title="Edit Request">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    <form method="POST" action="{{ url_for('delete_request', request_id=request.id) }}" style="display: inline;">
+                                        <button type="submit" class="btn btn-outline-danger btn-sm"
+                                                data-bs-toggle="tooltip" title="Delete Request"
+                                                onclick="return confirm('Delete this request? This action cannot be undone.')">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% if request.is_call_out %}
+                            <tr id="callout-details-{{ request.id }}" class="callout-details-row" style="display: none;">
+                                <td colspan="6">
+                                    <div class="call-out-details">
+                                        <h6><i class="fas fa-phone-alt text-danger"></i> Call-Out Details</h6>
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <p><strong>Submitted Via:</strong>
+                                                    <span id="callout-source-{{ request.id }}">Loading...</span>
+                                                </p>
+                                                <p><strong>Phone Number:</strong>
+                                                    <span id="callout-phone-{{ request.id }}">Loading...</span>
+                                                </p>
+                                                <p><strong>Authentication:</strong>
+                                                    <span id="callout-auth-{{ request.id }}">Loading...</span>
+                                                </p>
+                                                <p><strong>Received At:</strong>
+                                                    <span id="callout-time-{{ request.id }}">Loading...</span>
+                                                </p>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <div id="callout-content-{{ request.id }}">
+                                                    <p class="text-muted">Loading call-out details...</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="mt-2">
+                                            <button class="btn btn-sm btn-secondary" onclick="toggleCallOutDetails({{ request.id }})">
+                                                <i class="fas fa-times"></i> Close
+                                            </button>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endif %}
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-5">
+                    <i class="fas fa-clipboard-list fa-3x text-muted mb-3"></i>
+                    <h5 class="text-muted">No Pending PTO Requests</h5>
+                    <p class="text-muted">New requests will appear here for approval.</p>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- In Progress Tab -->
+            <div class="tab-pane fade" id="in-progress" role="tabpanel">
+                {% if in_progress_requests %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Employee</th>
+                                <th>Dates</th>
+                                <th>Type</th>
+                                <th>Checklist Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for request in in_progress_requests %}
+                            <tr>
+                                <td>
+                                    <strong>{{ request.member.name if request.member else 'Unknown' }}</strong><br>
+                                    <small class="text-muted">{{ request.member.position.name if request.member and request.member.position else 'No position' }}</small>
+                                </td>
+                                <td>
+                                    {{ request.start_date }} to {{ request.end_date }}
+                                    {% if request.is_partial_day %}
+                                    <br><small class="text-muted">
+                                        <i class="fas fa-clock"></i> {{ request.start_time }} - {{ request.end_time }}
+                                    </small>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <span class="badge bg-secondary">{{ request.pto_type }}</span>
+                                </td>
+                                <td>
+                                    <div>
+                                        <i class="fas fa-{% if request.timekeeping_entered %}check-circle text-success{% else %}circle text-muted{% endif %}"></i>
+                                        Timekeeping {{ 'Entered' if request.timekeeping_entered else 'Pending' }}
+                                    </div>
+                                    <div>
+                                        <i class="fas fa-{% if request.coverage_arranged %}check-circle text-success{% else %}circle text-muted{% endif %}"></i>
+                                        Coverage {{ 'Arranged' if request.coverage_arranged else 'Pending' }}
+                                    </div>
+                                    {% set progress = (request.timekeeping_entered|int + request.coverage_arranged|int) * 50 %}
+                                    <div class="progress mt-2" style="height: 20px;">
+                                        <div class="progress-bar bg-{% if progress == 100 %}success{% elif progress > 0 %}warning{% else %}secondary{% endif %}"
+                                             role="progressbar" style="width: {{ progress }}%">
+                                            {{ progress }}%
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <a href="{{ url_for('workqueue_in_progress') }}" class="btn btn-sm btn-warning"
+                                       data-bs-toggle="tooltip" title="Manage Checklist">
+                                        <i class="fas fa-tasks"></i> Manage
+                                    </a>
+                                    <a href="{{ url_for('edit_request', request_id=request.id) }}"
+                                       class="btn btn-outline-warning btn-sm ms-1"
+                                       data-bs-toggle="tooltip" title="Edit Request">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    <form method="POST" action="{{ url_for('delete_request', request_id=request.id) }}" style="display: inline;">
+                                        <button type="submit" class="btn btn-outline-danger btn-sm"
+                                                data-bs-toggle="tooltip" title="Delete Request"
+                                                onclick="return confirm('Delete this request? Balance will be restored.')">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-5">
+                    <i class="fas fa-tasks fa-3x text-muted mb-3"></i>
+                    <h5 class="text-muted">No In Progress Requests</h5>
+                    <p class="text-muted">Approved requests with pending checklist items will appear here.</p>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Approved Tab -->
+            <div class="tab-pane fade" id="approved" role="tabpanel">
+                {% if approved_requests %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Employee</th>
+                                <th>Dates</th>
+                                <th>Type</th>
+                                <th>Days</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for request in approved_requests %}
+                            {% set is_upcoming = request.start_date > now().strftime('%Y-%m-%d') %}
+                            {% set is_current = request.start_date <= now().strftime('%Y-%m-%d') and request.end_date >= now().strftime('%Y-%m-%d') %}
+                            <tr class="{% if is_current %}table-info{% elif is_upcoming %}table-light{% endif %}">
+                                <td>
+                                    <strong>{{ request.member.name if request.member else 'Unknown' }}</strong><br>
+                                    <small class="text-muted">{{ request.member.position.name if request.member and request.member.position else 'No position' }}</small>
+                                </td>
+                                <td>
+                                    {{ request.start_date }} to {{ request.end_date }}
+                                    {% if request.is_partial_day %}
+                                    <br><small class="text-muted">
+                                        <i class="fas fa-clock"></i> {{ request.start_time }} - {{ request.end_time }}
+                                    </small>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <span class="badge bg-secondary">{{ request.pto_type }}</span>
+                                </td>
+                                <td>
+                                    {% if request.is_partial_day %}
+                                        {{ "%.1f"|format(request.duration_hours) }} hrs
+                                    {% elif request.get_pto_breakdown %}
+                                        {% set breakdown = request.get_pto_breakdown() %}
+                                        {{ breakdown.business_days }}
+                                    {% else %}
+                                        {{ request.duration_days }}
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if is_current %}
+                                        <span class="badge bg-info">
+                                            <i class="fas fa-play-circle"></i> Active
+                                        </span>
+                                    {% elif is_upcoming %}
+                                        <span class="badge bg-primary">
+                                            <i class="fas fa-calendar-check"></i> Upcoming
+                                        </span>
+                                    {% else %}
+                                        <span class="badge bg-success">
+                                            <i class="fas fa-check"></i> Approved
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <a href="{{ url_for('workqueue_approved') }}" class="btn btn-sm btn-info"
+                                       data-bs-toggle="tooltip" title="View Details">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    <a href="{{ url_for('edit_request', request_id=request.id) }}"
+                                       class="btn btn-warning btn-sm ms-1"
+                                       data-bs-toggle="tooltip" title="Edit Request">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    <form method="POST" action="{{ url_for('delete_request', request_id=request.id) }}" style="display: inline;">
+                                        <button type="submit" class="btn btn-outline-danger btn-sm"
+                                                data-bs-toggle="tooltip" title="Delete Request"
+                                                onclick="return confirm('Delete this approved request? Balance will be restored.')">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-5">
+                    <i class="fas fa-check-circle fa-3x text-muted mb-3"></i>
+                    <h5 class="text-muted">No Approved Requests</h5>
+                    <p class="text-muted">Fully approved PTO requests will appear here.</p>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Employee Registrations Tab -->
+            <div class="tab-pane fade" id="employees-registrations" role="tabpanel">
+                {% if pending_employees %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Email</th>
+                                <th>Position</th>
+                                <th>Submitted</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for employee in pending_employees %}
+                            <tr>
+                                <td>{{ employee.name }}</td>
+                                <td>{{ employee.email }}</td>
+                                <td>{{ employee.position }}</td>
+                                <td>{{ employee.submitted_at.strftime('%m/%d/%Y') }}</td>
+                                <td>
+                                    <a href="{{ url_for('approve_employee', employee_id=employee.id) }}"
+                                       class="btn btn-success btn-sm me-1"
+                                       data-bs-toggle="tooltip" title="Approve Employee">
+                                        <i class="fas fa-check"></i> Approve
+                                    </a>
+                                    <form method="POST" action="{{ url_for('deny_employee', employee_id=employee.id) }}" style="display: inline;">
+                                        <button type="submit" class="btn btn-danger btn-sm"
+                                                data-bs-toggle="tooltip" title="Deny Registration">
+                                            <i class="fas fa-times"></i> Deny
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-5">
+                    <i class="fas fa-user-plus fa-3x text-muted mb-3"></i>
+                    <h5 class="text-muted">No Pending Employee Registrations</h5>
+                    <p class="text-muted">New employee registration requests will appear here.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Team Calendar -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="fas fa-calendar-alt me-2"></i>My Team Calendar</h5>
+                <div class="d-flex align-items-center gap-3">
+                    <div class="d-flex flex-wrap gap-2">
+                        <span class="badge bg-success"><i class="fas fa-circle"></i> Approved</span>
+                        <span class="badge bg-warning text-dark"><i class="fas fa-circle"></i> Pending</span>
+                        <span class="badge bg-danger"><i class="fas fa-circle"></i> Call-Out</span>
+                        <span class="badge" style="background-color: #6f42c1;"><i class="fas fa-circle"></i> Holiday</span>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body">
+                <div id="teamCalendar"></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<!-- FullCalendar JS -->
+<script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.9/index.global.min.js'></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl)
+    });
+
+    // Save active tab in localStorage
+    const tabs = document.querySelectorAll('.nav-tabs .nav-link');
+    tabs.forEach(tab => {
+        tab.addEventListener('shown.bs.tab', function(e) {
+            localStorage.setItem('scribeActiveTab', e.target.id);
+        });
+    });
+
+    // Restore active tab on page load
+    const activeTab = localStorage.getItem('scribeActiveTab');
+    if (activeTab) {
+        const tab = document.getElementById(activeTab);
+        if (tab) {
+            const bsTab = new bootstrap.Tab(tab);
+            bsTab.show();
+        }
+    }
+
+    // Initialize filter counts
+    updateFilterCounts();
+
+    // Handle filter changes
+    const filterButtons = document.querySelectorAll('input[name="pendingFilter"]');
+    filterButtons.forEach(button => {
+        button.addEventListener('change', function() {
+            filterRequests(this.value);
+        });
+    });
+
+    // Team search functionality
+    const teamSearch = document.getElementById('teamSearch');
+    if (teamSearch) {
+        teamSearch.addEventListener('input', function() {
+            const searchTerm = this.value.toLowerCase().trim();
+            const teamMembers = document.querySelectorAll('.team-member-item');
+            let visibleCount = 0;
+
+            teamMembers.forEach(member => {
+                const name = member.getAttribute('data-name') || '';
+                const position = member.getAttribute('data-position') || '';
+
+                if (name.includes(searchTerm) || position.includes(searchTerm)) {
+                    member.style.display = '';
+                    visibleCount++;
+                } else {
+                    member.style.display = 'none';
+                }
+            });
+
+            document.getElementById('teamCount').textContent = visibleCount;
+        });
+    }
+
+    // Initialize Team Calendar
+    const calendarEl = document.getElementById('teamCalendar');
+    const teamCalendar = new FullCalendar.Calendar(calendarEl, {
+        initialView: 'dayGridMonth',
+        headerToolbar: {
+            left: 'prev,next today',
+            center: 'title',
+            right: 'dayGridMonth,dayGridWeek'
+        },
+        events: '/api/team-calendar/scribes',
+        height: 'auto',
+        eventClick: function(info) {
+            const props = info.event.extendedProps;
+            if (props.is_holiday) return;
+
+            alert(
+                'Employee: ' + props.employee + '\n' +
+                'Type: ' + props.type + (props.is_call_out ? ' (Call Out)' : '') + '\n' +
+                'Status: ' + props.status.charAt(0).toUpperCase() + props.status.slice(1) + '\n' +
+                'Duration: ' + props.duration
+            );
+        },
+        eventDidMount: function(info) {
+            const props = info.event.extendedProps;
+            if (props.is_holiday) {
+                if (info.event.display !== 'background') {
+                    info.el.classList.add('holiday-event');
+                }
+                info.el.title = info.event.title || 'Holiday';
+            } else {
+                info.el.title = props.employee + ' - ' + props.type + ' (' + props.status + ')';
+            }
+        }
+    });
+    teamCalendar.render();
+
+    // Load holidays into team calendar
+    fetch('/api/holidays')
+        .then(response => response.json())
+        .then(holidays => {
+            teamCalendar.addEventSource(holidays);
+        })
+        .catch(error => console.error('Error loading holidays:', error));
+});
+
+function updateFilterCounts() {
+    const allRows = document.querySelectorAll('#pending-pto .request-row');
+    let ptoCount = 0;
+    let calloutCount = 0;
+
+    allRows.forEach(row => {
+        const type = row.getAttribute('data-request-type');
+        if (type === 'callout') {
+            calloutCount++;
+        } else {
+            ptoCount++;
+        }
+    });
+
+    document.getElementById('countAllPending').textContent = allRows.length;
+    document.getElementById('countPTOOnly').textContent = ptoCount;
+    document.getElementById('countCallOutsOnly').textContent = calloutCount;
+}
+
+function filterRequests(filterType) {
+    const allRows = document.querySelectorAll('#pending-pto .request-row');
+
+    allRows.forEach(row => {
+        const rowType = row.getAttribute('data-request-type');
+
+        if (filterType === 'all') {
+            row.style.display = '';
+        } else if (filterType === 'pto' && rowType === 'pto') {
+            row.style.display = '';
+        } else if (filterType === 'callout' && rowType === 'callout') {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+}
+
+function toggleCallOutDetails(requestId) {
+    const detailsRow = document.getElementById('callout-details-' + requestId);
+
+    if (detailsRow.style.display === 'none') {
+        detailsRow.style.display = '';
+        loadCallOutDetails(requestId);
+    } else {
+        detailsRow.style.display = 'none';
+    }
+}
+
+function loadCallOutDetails(requestId) {
+    fetch('/api/callout-details/' + requestId)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const callout = data.callout;
+
+                const sourceIcon = callout.source === 'phone' ? '<i class="fas fa-phone"></i> Phone Call' : '<i class="fas fa-sms"></i> Text Message';
+                const sourceBadgeClass = callout.source === 'phone' ? 'phone' : 'sms';
+                document.getElementById('callout-source-' + requestId).innerHTML =
+                    '<span class="call-out-badge ' + sourceBadgeClass + '">' + sourceIcon + '</span>';
+
+                document.getElementById('callout-phone-' + requestId).textContent = callout.phone_number || 'N/A';
+                document.getElementById('callout-auth-' + requestId).textContent = callout.auth_method || 'N/A';
+                document.getElementById('callout-time-' + requestId).textContent = callout.received_at || 'N/A';
+
+                let contentHtml = '';
+                if (callout.message) {
+                    contentHtml = '<div class="sms-message"><strong>Message:</strong><br>' + callout.message + '</div>';
+                }
+                document.getElementById('callout-content-' + requestId).innerHTML = contentHtml || '<p class="text-muted">No additional details</p>';
+            }
+        })
+        .catch(error => {
+            console.error('Error loading call-out details:', error);
+        });
+}
+</script>
+{% endblock %}

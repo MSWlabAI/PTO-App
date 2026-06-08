@@ -22,12 +22,23 @@ class EmailService:
         self.from_email = os.getenv('FROM_EMAIL', 'noreply@mswcvi.com')
         self.admin_email = os.getenv('ADMIN_EMAIL', 'admin@mswcvi.com')
         self.clinical_email = os.getenv('CLINICAL_EMAIL', 'clinical@mswcvi.com')
+        self.scribes_email = os.getenv('SCRIBES_EMAIL', '')
 
         # Initialize SendGrid client
         if self.sendgrid_api_key:
             self.sg_client = SendGridAPIClient(self.sendgrid_api_key)
         else:
             self.sg_client = None
+
+    def manager_email_for(self, manager_team):
+        """Look up the manager notification email for a team. Falls back to
+        clinical_email when scribes_email is unset so emails still go somewhere
+        rather than silently dropping."""
+        if manager_team == 'admin':
+            return self.admin_email
+        if manager_team == 'scribes':
+            return self.scribes_email or self.clinical_email
+        return self.clinical_email
 
     def send_email(self, to_email, subject, body_html=None, body_text=None):
         """Send email via SendGrid API"""
@@ -162,7 +173,7 @@ class EmailService:
         self.send_email(employee_email, employee_subject, employee_body_html, employee_body_text)
 
         # 2. Manager notification
-        manager_email = self.admin_email if pto_request.manager_team == 'admin' else self.clinical_email
+        manager_email = self.manager_email_for(pto_request.manager_team)
         manager_subject = f"{'✅ CALL-OUT Auto-Approved (FYI)' if call_out_info else 'New PTO Request'} - {employee_name}"
 
         # Build call-out details section for manager
