@@ -167,7 +167,7 @@ class Manager(User):
     __tablename__ = 'managers'
     
     id = Column(Integer, ForeignKey('users.id'), primary_key=True)
-    role = Column(String(30), nullable=False)  # 'admin', 'clinical', 'superadmin', 'moa_supervisor', 'echo_supervisor', 'scribe_supervisor', 'research_supervisor'
+    role = Column(String(30), nullable=False)  # 'admin', 'clinical', 'superadmin', 'moa_supervisor', 'echo_supervisor', 'scribe_supervisor', 'research_supervisor', 'scribe_research_supervisor'
     password_hash = Column(String(256))  # For authentication
     
     def __init__(self, name=None, email=None, role=None, password_hash=None, **kwargs):
@@ -201,6 +201,8 @@ class Manager(User):
         if self.role == 'scribe_supervisor' and position.team == 'scribes':
             return True
         if self.role == 'research_supervisor' and position.team == 'research':
+            return True
+        if self.role == 'scribe_research_supervisor' and position.team in ('scribes', 'research'):
             return True
         return False
     

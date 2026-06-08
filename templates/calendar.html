@@ -24,10 +24,10 @@
         <option value="">All Teams</option>
         <option value="admin">Admin</option>
         <option value="clinical">Clinical</option>
-        {% if session.user_role in ('superadmin', 'scribe_supervisor') %}
+        {% if session.user_role in ('superadmin', 'scribe_supervisor', 'scribe_research_supervisor') %}
         <option value="scribes">Scribes</option>
         {% endif %}
-        {% if session.user_role in ('superadmin', 'research_supervisor') %}
+        {% if session.user_role in ('superadmin', 'research_supervisor', 'scribe_research_supervisor') %}
         <option value="research">Research</option>
         {% endif %}
     </select>
@@ -42,10 +42,10 @@
         <option value="Cardiac CT Techs (4th Floor)">Cardiac CT Tech</option>
         <option value="Secretary II">Secretary II</option>
         <option value="Leadership - Admin">Leadership</option>
-        {% if session.user_role in ('superadmin', 'scribe_supervisor') %}
+        {% if session.user_role in ('superadmin', 'scribe_supervisor', 'scribe_research_supervisor') %}
         <option value="Scribe">Scribe</option>
         {% endif %}
-        {% if session.user_role in ('superadmin', 'research_supervisor') %}
+        {% if session.user_role in ('superadmin', 'research_supervisor', 'scribe_research_supervisor') %}
         <option value="Research Coordinator">Research Coordinator</option>
         {% endif %}
     </select>
