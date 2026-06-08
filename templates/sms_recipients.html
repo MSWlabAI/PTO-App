@@ -42,6 +42,7 @@
                     <option value="admin">Admin team only</option>
                     <option value="clinical">Clinical team only</option>
                     <option value="scribes">Scribes team only</option>
+                    <option value="research">Research team only</option>
                     <option value="both">Both teams (admin + clinical)</option>
                 </select>
             </div>
@@ -87,6 +88,8 @@
                                 <span class="badge bg-primary">Clinical</span>
                             {% elif r.team == 'scribes' %}
                                 <span class="badge bg-info">Scribes</span>
+                            {% elif r.team == 'research' %}
+                                <span class="badge bg-warning text-dark">Research</span>
                             {% else %}
                                 <span class="badge bg-dark">Both</span>
                             {% endif %}

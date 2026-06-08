@@ -23,6 +23,7 @@ class EmailService:
         self.admin_email = os.getenv('ADMIN_EMAIL', 'admin@mswcvi.com')
         self.clinical_email = os.getenv('CLINICAL_EMAIL', 'clinical@mswcvi.com')
         self.scribes_email = os.getenv('SCRIBES_EMAIL', '')
+        self.research_email = os.getenv('RESEARCH_EMAIL', '')
 
         # Initialize SendGrid client
         if self.sendgrid_api_key:
@@ -38,6 +39,8 @@ class EmailService:
             return self.admin_email
         if manager_team == 'scribes':
             return self.scribes_email or self.clinical_email
+        if manager_team == 'research':
+            return self.research_email or self.clinical_email
         return self.clinical_email
 
     def send_email(self, to_email, subject, body_html=None, body_text=None):

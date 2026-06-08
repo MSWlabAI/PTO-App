@@ -77,10 +77,13 @@ def register_twilio_routes(app):
             from models import SMSRecipient
             manager_team = member.position.team if member.position else None
             recipients = []
-            if manager_team in ('admin', 'clinical', 'scribes'):
-                # Scribes are intentionally isolated: 'both' targets only the
-                # admin+clinical pair, not scribes.
-                team_filter = [manager_team] if manager_team == 'scribes' else [manager_team, 'both']
+            if manager_team in ('admin', 'clinical', 'scribes', 'research'):
+                # Isolated teams (scribes, research) get only their own
+                # recipients; 'both' is admin+clinical only by design.
+                if manager_team in ('scribes', 'research'):
+                    team_filter = [manager_team]
+                else:
+                    team_filter = [manager_team, 'both']
                 recipients = SMSRecipient.query.filter(
                     SMSRecipient.active == True,
                     SMSRecipient.team.in_(team_filter)

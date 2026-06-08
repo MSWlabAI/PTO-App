@@ -161,7 +161,7 @@
             <div class="d-flex justify-content-between align-items-start">
                 <div>
                     <strong style="font-size: 1.05rem;">{{ request.member.name if request.member else 'Unknown' }}</strong>
-                    <span class="badge bg-{% if request.member and request.member.team == 'clinical' %}primary{% elif request.member and request.member.team == 'scribes' %}info{% else %}secondary{% endif %} ms-2">
+                    <span class="badge bg-{% if request.member and request.member.team == 'clinical' %}primary{% elif request.member and request.member.team == 'scribes' %}info{% elif request.member and request.member.team == 'research' %}warning text-dark{% else %}secondary{% endif %} ms-2">
                         {{ request.member.team|title if request.member else 'N/A' }}
                     </span>
                     {% if request.is_call_out %}
@@ -284,7 +284,7 @@
                             <br><small class="text-muted">{{ request.member.position.name if request.member and request.member.position else 'N/A' }}</small>
                         </td>
                         <td>
-                            <span class="badge bg-{% if request.member and request.member.team == 'clinical' %}primary{% elif request.member and request.member.team == 'scribes' %}info{% else %}secondary{% endif %}">
+                            <span class="badge bg-{% if request.member and request.member.team == 'clinical' %}primary{% elif request.member and request.member.team == 'scribes' %}info{% elif request.member and request.member.team == 'research' %}warning text-dark{% else %}secondary{% endif %}">
                                 {{ request.member.team|title if request.member else 'N/A' }}
                             </span>
                         </td>

@@ -126,7 +126,7 @@ class Position(db.Model):
     __tablename__ = 'positions'
     id = Column(Integer, primary_key=True)
     name = Column(String(100), unique=True, nullable=False)
-    team = Column(String(20), nullable=False)  # 'admin', 'clinical', or 'scribes'
+    team = Column(String(20), nullable=False)  # 'admin', 'clinical', 'scribes', or 'research'
 
     def __repr__(self):
         return f'<Position {self.name}>'
@@ -167,7 +167,7 @@ class Manager(User):
     __tablename__ = 'managers'
     
     id = Column(Integer, ForeignKey('users.id'), primary_key=True)
-    role = Column(String(30), nullable=False)  # 'admin', 'clinical', 'superadmin', 'moa_supervisor', 'echo_supervisor', 'scribe_supervisor'
+    role = Column(String(30), nullable=False)  # 'admin', 'clinical', 'superadmin', 'moa_supervisor', 'echo_supervisor', 'scribe_supervisor', 'research_supervisor'
     password_hash = Column(String(256))  # For authentication
     
     def __init__(self, name=None, email=None, role=None, password_hash=None, **kwargs):
@@ -199,6 +199,8 @@ class Manager(User):
         if self.role == 'echo_supervisor' and ('Echo' in position.name or 'Vascular' in position.name):
             return True
         if self.role == 'scribe_supervisor' and position.team == 'scribes':
+            return True
+        if self.role == 'research_supervisor' and position.team == 'research':
             return True
         return False
     
@@ -361,7 +363,7 @@ class PendingEmployee(db.Model):
     id = Column(Integer, primary_key=True)
     name = Column(String(100), nullable=False)
     email = Column(String(120), nullable=False)
-    team = Column(String(20), nullable=False)  # 'admin', 'clinical', or 'scribes'
+    team = Column(String(20), nullable=False)  # 'admin', 'clinical', 'scribes', or 'research'
     position = Column(String(50), nullable=False)
     status = Column(String(20), default='pending')  # pending, approved, denied
     submitted_at = Column(DateTime, default=get_eastern_time)
