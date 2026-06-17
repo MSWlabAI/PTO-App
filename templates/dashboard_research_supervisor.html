@@ -822,6 +822,9 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function updateFilterCounts() {
+    const allCountEl = document.getElementById('countAllPending');
+    if (!allCountEl) return;
+
     const allRows = document.querySelectorAll('#pending-pto .request-row');
     let ptoCount = 0;
     let calloutCount = 0;
@@ -835,7 +838,7 @@ function updateFilterCounts() {
         }
     });
 
-    document.getElementById('countAllPending').textContent = allRows.length;
+    allCountEl.textContent = allRows.length;
     document.getElementById('countPTOOnly').textContent = ptoCount;
     document.getElementById('countCallOutsOnly').textContent = calloutCount;
 }
