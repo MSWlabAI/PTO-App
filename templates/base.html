@@ -78,6 +78,24 @@
                             <li><a class="dropdown-item" href="{{ url_for('echo_supervisor_dashboard') }}">
                                 <i class="fas fa-heartbeat me-2"></i>Echo Tech Supervisor
                             </a></li>
+                            {% elif session.user_role == 'scribe_supervisor' %}
+                            <li><a class="dropdown-item" href="{{ url_for('scribe_supervisor_dashboard') }}">
+                                <i class="fas fa-user-pen me-2"></i>Scribe Supervisor
+                            </a></li>
+                            {% elif session.user_role == 'research_supervisor' %}
+                            <li><a class="dropdown-item" href="{{ url_for('research_supervisor_dashboard') }}">
+                                <i class="fas fa-microscope me-2"></i>Research Supervisor
+                            </a></li>
+                            {% elif session.user_role == 'scribe_research_supervisor' %}
+                            <li><a class="dropdown-item" href="{{ url_for('scribe_research_overview') }}">
+                                <i class="fas fa-layer-group me-2"></i>Scribes + Research Overview
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('scribe_supervisor_dashboard') }}">
+                                <i class="fas fa-user-pen me-2"></i>Scribes only
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('research_supervisor_dashboard') }}">
+                                <i class="fas fa-microscope me-2"></i>Research only
+                            </a></li>
                             {% endif %}
                         </ul>
                     </li>
