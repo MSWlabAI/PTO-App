@@ -682,6 +682,64 @@ def register_routes(app):
         except Exception as e:
             return jsonify({'error': str(e)}), 500
 
+    @app.route('/api/team-calendar/scribes-research')
+    def get_scribes_research_calendar():
+        """Combined feed for scribe_research_supervisor's overview calendar.
+        Returns events for BOTH isolated teams in a single response."""
+        user_role = session.get('user_role')
+        if user_role != 'scribe_research_supervisor':
+            return jsonify({'error': 'Forbidden'}), 403
+        try:
+            requests = PTORequest.query.filter(
+                PTORequest.manager_team.in_(['scribes', 'research']),
+                PTORequest.status.in_(['approved', 'pending'])
+            ).all()
+            events = []
+            for req in requests:
+                if req.is_call_out:
+                    color, text_color = '#dc3545', '#fff'
+                elif req.status == 'approved':
+                    color, text_color = '#28a745', '#fff'
+                elif req.status == 'pending':
+                    color, text_color = '#ffc107', '#000'
+                else:
+                    color, text_color = '#6c757d', '#fff'
+                try:
+                    if req.is_partial_day:
+                        duration_label = f"{req.duration_hours:.1f} hrs"
+                    else:
+                        d = req.duration_days
+                        duration_label = f"{d} day{'s' if d != 1 else ''}"
+                except Exception:
+                    duration_label = "1 day"
+                title = (f"CALL OUT - {req.member.name}" if req.is_call_out
+                         else f"{req.member.name} ({req.manager_team})")
+                segments = _get_business_day_segments(req.start_date, req.end_date)
+                for idx, (seg_start, seg_end) in enumerate(segments):
+                    events.append({
+                        'id': f'{req.id}-{idx}',
+                        'title': title,
+                        'start': seg_start,
+                        'end': seg_end,
+                        'color': color,
+                        'textColor': text_color,
+                        'allDay': True,
+                        'extendedProps': {
+                            'employee': req.member.name,
+                            'employee_position': req.member.position.name if req.member.position else '',
+                            'type': req.pto_type,
+                            'status': req.status,
+                            'is_call_out': req.is_call_out,
+                            'is_partial_day': req.is_partial_day,
+                            'duration': duration_label,
+                            'reason': req.reason or '',
+                            'team': req.manager_team,
+                        }
+                    })
+            return jsonify(events)
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
     @app.route('/api/team-calendar/<team>')
     def get_team_calendar(team):
         """API endpoint to get team-specific calendar events.

@@ -789,10 +789,7 @@ document.addEventListener('DOMContentLoaded', function() {
             center: 'title',
             right: 'dayGridMonth,dayGridWeek'
         },
-        eventSources: [
-            { url: '/api/team-calendar/scribes' },
-            { url: '/api/team-calendar/research' }
-        ],
+        events: '/api/team-calendar/scribes-research',
         height: 'auto',
         eventClick: function(info) {
             const props = info.event.extendedProps;
