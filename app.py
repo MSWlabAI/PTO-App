@@ -201,8 +201,59 @@ def seed_sms_recipients_from_env():
         db.session.delete(r)
         changed = True
 
-    # Ensure everyone remaining gets both teams
+    # Supervisors of the isolated teams must only receive call-outs for their
+    # own team, never admin/clinical. Derive them from the manager role rather
+    # than hardcoding phone numbers, and exclude them from the 'both' reset.
+    # Phones are stored normalized (+1XXXXXXXXXX), so compare on trailing
+    # digits: a bare 10-digit number never equals its 11-digit stored form.
+    ISOLATED_ROLE_TEAMS = {
+        'scribe_supervisor': ('scribes',),
+        'research_supervisor': ('research',),
+        'scribe_research_supervisor': ('scribes', 'research'),
+    }
+
+    isolated = []  # (name, normalized_phone, digits, teams)
+    for mgr in Manager.query.filter(
+        Manager.role.in_(ISOLATED_ROLE_TEAMS.keys())
+    ).all():
+        if not _digits(mgr.phone):
+            print(f'Skipping {mgr.name} ({mgr.role}): no phone on record')
+            continue
+        phone = SMSRecipient.normalize_phone(mgr.phone)
+        isolated.append((mgr.name, phone, _digits(phone), ISOLATED_ROLE_TEAMS[mgr.role]))
+
+    def _is_isolated(phone):
+        d = _digits(phone)
+        return any(d.endswith(sd[-10:]) for _, _, sd, _ in isolated)
+
+    for name, phone, sup_digits, teams in isolated:
+        rows = [
+            r for r in SMSRecipient.query.all()
+            if _digits(r.phone).endswith(sup_digits[-10:])
+        ]
+        # Keep at most one row per allowed team; drop off-team rows and dupes.
+        keep = {}
+        for r in rows:
+            if r.team in teams and r.team not in keep:
+                keep[r.team] = r
+                continue
+            print(f'Removing off-team/duplicate SMS row for {r.name}: team={r.team}')
+            db.session.delete(r)
+            changed = True
+        for team in teams:
+            if team not in keep:
+                print(f'Adding {team} SMS row for {name}')
+                db.session.add(SMSRecipient(name=name, phone=phone, team=team, active=True))
+                changed = True
+            elif not keep[team].active:
+                print(f'Reactivating {team} SMS row for {name}')
+                keep[team].active = True
+                changed = True
+
+    # Ensure everyone else gets both teams (admin + clinical)
     for r in SMSRecipient.query.filter(SMSRecipient.team != 'both').all():
+        if _is_isolated(r.phone):
+            continue
         print(f'Setting {r.name} ({r.phone}) to both teams')
         r.team = 'both'
         changed = True

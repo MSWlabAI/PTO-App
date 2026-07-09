@@ -278,8 +278,7 @@ class EmailService:
     def send_approval_email(self, pto_request):
         """Send email notification when PTO request is approved"""
 
-        # Override employee email to send to samantha.zakow@mountsinai.org for testing
-        employee_email = 'samantha.zakow@mountsinai.org'
+        employee_email = pto_request.member.email
         employee_name = pto_request.member.name
         request_id = pto_request.id
 
@@ -345,8 +344,7 @@ class EmailService:
     def send_denial_email(self, pto_request, denial_reason=None):
         """Send email notification when PTO request is denied"""
 
-        # Override employee email to send to samantha.zakow@mountsinai.org for testing
-        employee_email = 'samantha.zakow@mountsinai.org'
+        employee_email = pto_request.member.email
         employee_name = pto_request.member.name
         request_id = pto_request.id
 
@@ -416,8 +414,7 @@ class EmailService:
     def send_checklist_complete_email(self, pto_request):
         """Send email notification when checklist is completed and request is fully approved"""
 
-        # Override employee email to send to samantha.zakow@mountsinai.org for testing
-        employee_email = 'samantha.zakow@mountsinai.org'
+        employee_email = pto_request.member.email
         employee_name = pto_request.member.name
         request_id = pto_request.id
 

@@ -44,6 +44,7 @@ clinical_cookies.txt
 # Environment variables
 .env
 .env.local
+.env.vercel-backup-prod
 
 # Migration/export files (contain sensitive data)
 mswcvi-export-*.json
