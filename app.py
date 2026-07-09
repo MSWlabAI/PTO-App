@@ -436,6 +436,10 @@ register_routes(app)
 from routes_twilio import register_twilio_routes
 register_twilio_routes(app)
 
+# Register scheduled-job routes (daily summary email)
+from routes_cron import register_cron_routes
+register_cron_routes(app)
+
 with app.app_context():
     initialize_database()
 

@@ -11,5 +11,15 @@
       "src": "/(.*)",
       "dest": "app.py"
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/daily-summary",
+      "schedule": "30 12 * * 1-5"
+    },
+    {
+      "path": "/api/cron/daily-summary",
+      "schedule": "30 13 * * 1-5"
+    }
   ]
 }
