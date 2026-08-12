@@ -1,25 +1,13 @@
 {
   "version": 2,
-  "builds": [
-    {
-      "src": "app.py",
-      "use": "@vercel/python"
-    }
-  ],
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "app.py"
-    }
-  ],
-  "crons": [
-    {
-      "path": "/api/cron/daily-summary",
-      "schedule": "30 12 * * 1-5"
-    },
-    {
-      "path": "/api/cron/daily-summary",
-      "schedule": "30 13 * * 1-5"
+      "status": 307,
+      "headers": {
+        "Location": "https://pto-app.mswheart.com/$1",
+        "Cache-Control": "no-store"
+      }
     }
   ]
 }
